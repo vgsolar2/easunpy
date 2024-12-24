@@ -1,0 +1,218 @@
+import socket
+import struct
+import time
+
+import pandas as pd
+from easunpy.crc import crc16_modbus
+
+class ModbusClient:
+    def __init__(self, inverter_ip: str, local_ip: str, port: int = 8899):
+        self.inverter_ip = inverter_ip
+        self.local_ip = local_ip
+        self.port = port
+        self.request_id = 0  # Add request ID counter
+
+    def send_udp_discovery(self) -> bool:
+        """Perform UDP discovery to initialize the inverter communication."""
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_sock:
+            udp_sock.settimeout(5)
+            udp_message = f"set>server={self.local_ip}:{self.port};"
+            try:
+                udp_sock.sendto(udp_message.encode(), (self.inverter_ip, 58899))
+                response, _ = udp_sock.recvfrom(1024)
+                return True
+            except socket.timeout:
+                return False
+            except Exception as e:
+                return False
+
+    def send(self, hex_command: str, retry_count: int = 2) -> str:
+        """Send a Modbus TCP command."""
+        command_bytes = bytes.fromhex(hex_command)
+
+        for attempt in range(retry_count):
+            if not self.send_udp_discovery():
+                time.sleep(1)
+                continue
+
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_server:
+                tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
+                tcp_server.settimeout(10)
+                
+                try:
+                    tcp_server.bind((self.local_ip, self.port))
+                    tcp_server.listen(1)
+
+                    client_sock, addr = tcp_server.accept()
+                    
+                    with client_sock:
+                        client_sock.settimeout(5)
+                        client_sock.sendall(command_bytes)
+
+                        response = client_sock.recv(1024)
+                        
+                        if len(response) >= 6:
+                            expected_length = int.from_bytes(response[4:6], 'big') + 6
+                            
+                            while len(response) < expected_length:
+                                chunk = client_sock.recv(1024)
+                                if not chunk:
+                                    break
+                                response += chunk
+
+                        response_hex = response.hex()
+                        return response_hex
+
+                except socket.timeout:
+                    time.sleep(1)
+                    continue
+                except Exception as e:
+                    time.sleep(1)
+                    continue
+
+        return ""
+
+def run_single_request(inverter_ip: str, local_ip: str, request: str):
+    """
+    Sends a single Modbus request to the inverter.
+    """
+    inverter = ModbusClient(inverter_ip=inverter_ip, local_ip=local_ip)
+    response = inverter.send(request)
+    return response
+
+# Función para crear la solicitud completa
+def create_request(transaction_id: int, protocol_id: int, unit_id: int, function_code: int,
+                   register_address: int, register_offset: int) -> str:
+    """
+    Create a Modbus command with the correct length and CRC for the RTU packet.
+    """
+    # Construir el paquete RTU
+    rtu_packet = bytearray([
+        unit_id,
+        function_code,
+        (register_address >> 8) & 0xFF, register_address & 0xFF,
+        (register_offset >> 8) & 0xFF, register_offset & 0xFF
+    ])
+
+    # Calcular el CRC para el paquete RTU
+    crc = crc16_modbus(rtu_packet)
+    crc_low = crc & 0xFF
+    crc_high = (crc >> 8) & 0xFF
+
+    # Agregar CRC al paquete RTU
+    rtu_packet.extend([crc_low, crc_high])
+    
+    # Campo adicional `FF04`
+    rtu_packet = bytearray([0xFF, 0x04]) + rtu_packet
+    
+    # Calcular la longitud total (incluye solo RTU) + TCP
+    length = len(rtu_packet)
+    
+    # Construir el comando completo
+    command = bytearray([
+        (transaction_id >> 8) & 0xFF, transaction_id & 0xFF,  # Transaction ID
+        (protocol_id >> 8) & 0xFF, protocol_id & 0xFF,        # Protocol ID
+        (length >> 8) & 0xFF, length & 0xFF                  # Longitud
+    ]) + rtu_packet
+
+    return command.hex()
+
+def decode_modbus_response(response: str, register_count: int=1, data_format: str="Int"):
+    """
+    Decodes a Modbus TCP response using the provided format.
+    :param request: Hexadecimal string of the Modbus request.
+    :param response: Hexadecimal string of the Modbus response.
+    :return: Dictionary with register addresses and their values.
+    """
+    # Extract common fields from response
+    req_id = response[:8]
+    length_hex = response[8:12]
+    length = int(length_hex, 16)
+    
+    # Extract RTU payload
+    rtu_payload = response[12:12 + length * 2]
+
+    # Decode RTU Payload
+    extra_field = rtu_payload[:2]
+    device_address = rtu_payload[2:4]
+    function_code = rtu_payload[4:6]
+    num_data_bytes = int(rtu_payload[8:10], 16)
+    data_bytes = rtu_payload[10:10 + num_data_bytes * 2]
+    # Decode the register values and pair with addresses
+    values = []
+    for i, _ in enumerate(range(register_count)):
+        if data_format == "Int":
+            # Handle signed 16-bit integers
+            value = int(data_bytes[i * 4:(i + 1) * 4], 16)
+            # If the highest bit is set (value >= 32768), it's negative
+            if value >= 32768:  # 0x8000
+                value -= 65536  # 0x10000
+        elif data_format == "UnsignedInt":
+            # Handle unsigned 16-bit integers (0 to 65535)
+            value = int(data_bytes[i * 4:(i + 1) * 4], 16)
+        elif data_format == "Float":
+            value = struct.unpack('f', bytes.fromhex(data_bytes[i * 4:(i + 1) * 4]))[0]
+        else:
+            raise ValueError(f"Unsupported data format: {data_format}")
+        values.append(value)
+
+    return values
+
+def get_registers_from_request(request: str) -> list:
+    """
+    Extracts register addresses from a Modbus request
+    :param request: Hexadecimal string of the Modbus request
+    :return: List of register addresses
+    """
+    rtu_payload = request[12:]  # Skip TCP header
+    register_address = int(rtu_payload[8:12], 16)  # Get register address from RTU payload
+    register_count = int(rtu_payload[12:16], 16)  # Get number of registers
+    
+    registers = []
+    for i in range(register_count):
+        registers.append(register_address + i)
+        
+    return registers
+
+def query_register(register_address: int, register_offset: int, register_data_format: str):
+    req = create_request(0x0777, 0x0001, 0x01, 0x03, register_address, register_offset)
+    res = run_single_request('192.168.1.129', '192.168.1.135', req)
+    registers = get_registers_from_request(req)
+    print(f"Reading registers: {registers}")
+    decoded = decode_modbus_response(res, len(registers), data_format=register_data_format)
+    print(decoded)
+    
+def debug_modbus_client():
+    reqresp = pd.read_csv('easunpy/extracted_requests_responses.csv')
+    registers_count = 0
+    for i, entry in reqresp.iterrows():
+        if entry['Type'] == 'Request':
+            print(f"Request: {entry['Payload']}")
+            registers = get_registers_from_request(entry['Payload'])
+            registers_count = len(registers)
+            print(registers)
+        if entry['Type'] == 'Response':
+            print(f"Response: {entry['Payload']}")
+            print(decode_modbus_response(entry['Payload'], registers_count))
+
+def debug_single_register(register_address: int):
+    transaction_id = 0x0777
+    protocol_id = 0x0001
+    unit_id = 0x01
+    function_code = 0x03
+    register_offset = 1  # Número de registros a leer
+    
+    command = create_request(transaction_id, protocol_id, unit_id, function_code, register_address, register_offset)
+    print(command)
+    resp = run_single_request('192.168.1.129', '192.168.1.135', command)
+    print(resp)
+    print(decode_modbus_response(resp, 1, "Int"))
+     
+ 
+
+if __name__ == '__main__':
+    # debug_modbus_client()
+    # debug_single_register(257)
+    from easunpy.debug.isolar_smg_II import run_all_requests
+    run_all_requests('192.168.1.129', '192.168.1.135')
