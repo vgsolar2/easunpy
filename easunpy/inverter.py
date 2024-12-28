@@ -162,7 +162,7 @@ class ModbusInverter:
 if __name__ == '__main__':
     inverter = ModbusInverter()
 
-    device_ip = '192.168.1.129'  # Replace with the actual IP address of the inverter
+    device_ip = '192.168.1.144'  # Replace with the actual IP address of the inverter
     local_ip = '192.168.1.135'  # Replace with the actual local IP address
 
     try:

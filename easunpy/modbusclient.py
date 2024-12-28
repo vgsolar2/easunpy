@@ -29,9 +29,13 @@ class ModbusClient:
     def send(self, hex_command: str, retry_count: int = 2) -> str:
         """Send a Modbus TCP command."""
         command_bytes = bytes.fromhex(hex_command)
+        print(f"Sending command: {hex_command}")
 
         for attempt in range(retry_count):
+            print(f"Attempt {attempt + 1} of {retry_count}")
+            
             if not self.send_udp_discovery():
+                print("UDP discovery failed")
                 time.sleep(1)
                 continue
 
@@ -41,15 +45,20 @@ class ModbusClient:
                 tcp_server.settimeout(10)
                 
                 try:
+                    print(f"Binding to {self.local_ip}:{self.port}")
                     tcp_server.bind((self.local_ip, self.port))
                     tcp_server.listen(1)
 
+                    print("Waiting for client connection...")
                     client_sock, addr = tcp_server.accept()
+                    print(f"Client connected from {addr}")
                     
                     with client_sock:
                         client_sock.settimeout(5)
+                        print("Sending command bytes...")
                         client_sock.sendall(command_bytes)
 
+                        print("Waiting for response...")
                         response = client_sock.recv(1024)
                         
                         if len(response) >= 6:
@@ -62,15 +71,19 @@ class ModbusClient:
                                 response += chunk
 
                         response_hex = response.hex()
+                        print(f"Received response: {response_hex}")
                         return response_hex
 
                 except socket.timeout:
+                    print("Socket timeout")
                     time.sleep(1)
                     continue
                 except Exception as e:
+                    print(f"Error: {str(e)}")
                     time.sleep(1)
                     continue
 
+        print("All retry attempts failed")
         return ""
 
 def run_single_request(inverter_ip: str, local_ip: str, request: str):
@@ -177,7 +190,7 @@ def get_registers_from_request(request: str) -> list:
 
 def query_register(register_address: int, register_offset: int, register_data_format: str):
     req = create_request(0x0777, 0x0001, 0x01, 0x03, register_address, register_offset)
-    res = run_single_request('192.168.1.129', '192.168.1.135', req)
+    res = run_single_request('192.168.1.130', '192.168.1.144', req)
     registers = get_registers_from_request(req)
     print(f"Reading registers: {registers}")
     decoded = decode_modbus_response(res, len(registers), data_format=register_data_format)
@@ -205,14 +218,10 @@ def debug_single_register(register_address: int):
     
     command = create_request(transaction_id, protocol_id, unit_id, function_code, register_address, register_offset)
     print(command)
-    resp = run_single_request('192.168.1.129', '192.168.1.135', command)
+    resp = run_single_request('192.168.1.130', '192.168.1.1144', command)
     print(resp)
     print(decode_modbus_response(resp, 1, "Int"))
      
  
 
-if __name__ == '__main__':
-    # debug_modbus_client()
-    # debug_single_register(257)
-    from easunpy.debug.isolar_smg_II import run_all_requests
-    run_all_requests('192.168.1.129', '192.168.1.135')
+

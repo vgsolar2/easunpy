@@ -16,6 +16,10 @@ setup(
     package_data={
         'easunpy': ['commands.json'],
     },
+    install_requires=[
+        'rich>=10.0.0',
+        'pandas>=1.0.0',
+    ],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

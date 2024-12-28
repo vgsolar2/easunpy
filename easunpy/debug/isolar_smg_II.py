@@ -56,4 +56,4 @@ def run_all_requests(inverter_ip: str, local_ip: str):
 
 if __name__ == '__main__':
     # Example usage
-    run_all_requests('192.168.1.129', '192.168.1.135')
+    run_all_requests('192.168.1.130', '192.168.1.135')
