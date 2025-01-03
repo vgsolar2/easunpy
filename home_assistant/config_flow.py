@@ -17,13 +17,22 @@ class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
-        if user_input is None:
-            return self.async_show_form(
-                step_id="user",
-                data_schema=vol.Schema({
-                    vol.Required("inverter_ip"): str,
-                    vol.Required("local_ip"): str,
-                })
-            )
+        errors = {}
+        if user_input is not None:
+            # Validate the input data
+            inverter_ip = user_input.get("inverter_ip")
+            local_ip = user_input.get("local_ip")
+            
+            if not inverter_ip or not local_ip:
+                errors["base"] = "missing_ip"
+            else:
+                return self.async_create_entry(title="Easun Inverter", data=user_input)
 
-        return self.async_create_entry(title="Easun Inverter", data=user_input) 
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Required("inverter_ip"): str,
+                vol.Required("local_ip"): str,
+            }),
+            errors=errors
+        ) 

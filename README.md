@@ -1,50 +1,52 @@
 # EasunPy
 
-A Python command-line tool for communicating with Easun inverters.
+EasunPy is a tool for monitoring Easun ISolar inverters. It provides a command-line interface and a simple script for easy setup and monitoring.
 
-## Installation
+## Features
 
-bash
-pip install -e .
+- Monitor Easun ISolar inverters using a command-line interface.
+- Display inverter data such as battery status, solar status, grid status, and output status.
+- Live mode for continuous updates.
 
-## Usage
+## Quick Start with `monitor.sh`
 
-The tool can be run using the following command structure:
+For an easy setup, you can use the `monitor.sh` script. This script simplifies the process of starting the monitor by automatically detecting your local IP address and allowing you to specify the inverter IP and update interval.
 
-``` bash
-python -m easunpy <command> <device_ip> [args...] [--local-ip <local_ip>]
-```
+### Usage
 
-### Parameters
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/yourusername/easunpy.git
+   cd easunpy
+   ```
 
-- `command`: The command to execute (see Commands section)
-- `device_ip`: The IP address of your Easun inverter
-- `args`: Additional arguments required by specific commands (optional)
-- `--local-ip`: Your local IP address (defaults to 0.0.0.0)
+2. **Run the monitor script**:
+   ```bash
+   ./monitor.sh --inverter-ip <INVERTER_IP> [--interval <SECONDS>] [--live]
+   ```
+
+   - `--inverter-ip`: Specify the IP address of your inverter.
+   - `--interval`: Set the update interval in seconds (default is 5 seconds).
+   - `--live`: Enable live mode for continuous updates (minimum interval is 15 seconds).
 
 ### Example
 
 ``` bash
-python -m easunpy get_status 192.168.1.100 --local-ip 192.168.1.10
+./monitor.sh --inverter-ip 192.168.1.129 --interval 10 --live
 ```
 
-## How It Works
 
-1. The tool first sends a UDP discovery packet to the inverter on port 58899
-2. It then starts a TCP server on port 8899
-3. Once the inverter connects, it sends the requested command sequence
-4. The responses from the inverter are displayed in hexadecimal format
+This command will start monitoring the inverter at IP `192.168.1.129` with updates every 10 seconds in live mode.
 
-## Network Requirements
+## Home Assistant Integration
 
-- The tool requires UDP port 58899 for discovery
-- TCP port 8899 must be available for the server
-- The inverter must be able to reach your computer's IP address
+We are currently working on integrating EasunPy with Home Assistant to provide a seamless experience for home automation enthusiasts. Stay tuned for updates!
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a pull request or open an issue.
 
 ## License
 
-[Add your chosen license here]
+This project is licensed under the MIT License.
+

@@ -42,6 +42,11 @@ async def async_setup_entry(
     isolar = ISolar(inverter_ip=inverter_ip, local_ip=local_ip)
     _LOGGER.debug(f"ISolar instance created with IP: {inverter_ip}")
 
+    # Ensure that the ISolar instance is connected and ready
+    if not isolar.is_connected():
+        _LOGGER.error("Failed to connect to ISolar inverter")
+        return
+
     entities = [
         EasunSensor(isolar, "battery_voltage", "Battery Voltage", ELECTRIC_POTENTIAL_VOLT, "battery", "voltage"),
         # Add other sensors as needed
@@ -62,6 +67,7 @@ class EasunSensor(SensorEntity):
         self._data_type = data_type
         self._data_attr = data_attr
         self._state = None
+        self.update()  # Fetch initial data
 
     @property
     def name(self):
@@ -83,23 +89,23 @@ class EasunSensor(SensorEntity):
         """Return the unit of measurement."""
         return self._unit
 
-    def update(self) -> None:
+    async def async_update(self) -> None:
         """Fetch new state data for the sensor."""
         _LOGGER.debug(f"Updating sensor {self._name}")
         try:
             if self._data_type == "battery":
-                data = self._isolar.get_battery_data()
+                data = await self._isolar.get_battery_data()
             elif self._data_type == "pv":
-                data = self._isolar.get_pv_data()
+                data = await self._isolar.get_pv_data()
             elif self._data_type == "grid":
-                data = self._isolar.get_grid_data()
+                data = await self._isolar.get_grid_data()
             elif self._data_type == "output":
-                data = self._isolar.get_output_data()
-            
+                data = await self._isolar.get_output_data()
+
             if data:
                 self._state = getattr(data, self._data_attr)
                 _LOGGER.debug(f"Sensor {self._name} updated with state: {self._state}")
             else:
                 _LOGGER.error(f"Failed to get {self._data_type} data")
         except Exception as e:
-            _LOGGER.error(f"Error updating sensor {self._name}: {str(e)}") 
+            _LOGGER.error(f"Error updating sensor {self._name}: {str(e)}")

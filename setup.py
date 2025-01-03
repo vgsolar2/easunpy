@@ -7,18 +7,13 @@ setup(
     name="easunpy",
     version="0.1.0",
     author="Your Name",
-    author_email="galindus@gmail.com",
-    description="A Python tool for communicating with Easun/PowMr inverters",
+    author_email="vgsolar2@proton.me",
+    description="A Python tool for communicating with Easun isolar inverters",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/galindus/easunpy",
     packages=find_packages(),
-    package_data={
-        'easunpy': ['commands.json'],
-    },
     install_requires=[
         'rich>=10.0.0',
-        'pandas>=1.0.0',
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",
