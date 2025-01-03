@@ -53,3 +53,5 @@ cover/
 
 # Logs
 *.log 
+
+Makefile
