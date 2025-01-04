@@ -1,7 +1,11 @@
+import logging
 from dataclasses import dataclass
 from typing import List, Optional
 from .modbusclient import ModbusClient, create_request, decode_modbus_response
 from enum import Enum
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 @dataclass
 class BatteryData:
@@ -62,19 +66,19 @@ class ISolar:
         """Read a sequence of registers."""
         try:
             request = create_request(0x0777, 0x0001, 0x01, 0x03, start_register, count)
-            print(f"Sending request for registers {start_register}-{start_register + count - 1}: {request}")
+            logger.debug(f"Sending request for registers {start_register}-{start_register + count - 1}: {request}")
             
             response = self.client.send(request)
             if not response:
-                print(f"No response received for registers {start_register}-{start_register + count - 1}")
+                logger.warning(f"No response received for registers {start_register}-{start_register + count - 1}")
                 return []
             
-            print(f"Received response: {response}")
+            logger.debug(f"Received response: {response}")
             decoded = decode_modbus_response(response, count, data_format)
-            print(f"Decoded values: {decoded}")
+            logger.debug(f"Decoded values: {decoded}")
             return decoded
         except Exception as e:
-            print(f"Error reading registers {start_register}-{start_register + count - 1}: {str(e)}")
+            logger.error(f"Error reading registers {start_register}-{start_register + count - 1}: {str(e)}")
             return []
 
     def get_battery_data(self) -> Optional[BatteryData]:
@@ -84,8 +88,8 @@ class ISolar:
             return None
         
         return BatteryData(
-            voltage=values[0] / 10.0,  # Scale voltage to actual value
-            current=values[1] / 10.0,  # Scale current to actual value
+            voltage=values[0] / 10.0,
+            current=values[1] / 10.0,
             power=values[2],
             soc=values[3],
             temperature=values[4]
@@ -178,7 +182,7 @@ class ISolar:
             serial = ''.join(chr(value >> 8) + chr(value & 0xFF) for value in values)
             return serial.replace('\x00', '').strip()
         except:
-            return "" 
+            return ""
 
     def get_operating_mode(self) -> Optional[SystemStatus]:
         """Get system operating mode (register 600)."""
@@ -197,3 +201,11 @@ class ISolar:
                 operating_mode=OperatingMode.FAULT,
                 mode_name=f"UNKNOWN ({values[0]})"
             ) 
+
+    def is_connected(self) -> bool:
+        """Check if the inverter is connected by attempting to retrieve the serial number."""
+        try:
+            serial_number = self.get_serial_number()
+            return bool(serial_number)
+        except Exception:
+            return False

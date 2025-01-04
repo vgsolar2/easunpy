@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "easun_inverter"
 
@@ -13,7 +16,13 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Easun Inverter from a config entry."""
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+    _LOGGER.debug("Setting up Easun Inverter from config entry")
+    
+    # Forward the setup to the sensor platform
+    hass.async_create_task(
+        hass.config_entries.async_forward_entry_setup(entry, "sensor")
+    )
+    
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

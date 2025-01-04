@@ -28,9 +28,9 @@ SCAN_INTERVAL = timedelta(seconds=30)
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Easun Inverter sensors."""
+    """Set up the Easun Inverter sensors asynchronously."""
     _LOGGER.debug("Setting up Easun Inverter sensors")
     inverter_ip = config_entry.data.get("inverter_ip")
     local_ip = config_entry.data.get("local_ip")
@@ -42,17 +42,33 @@ async def async_setup_entry(
     isolar = ISolar(inverter_ip=inverter_ip, local_ip=local_ip)
     _LOGGER.debug(f"ISolar instance created with IP: {inverter_ip}")
 
-    # Ensure that the ISolar instance is connected and ready
-    if not isolar.is_connected():
-        _LOGGER.error("Failed to connect to ISolar inverter")
-        return
-
     entities = [
         EasunSensor(isolar, "battery_voltage", "Battery Voltage", ELECTRIC_POTENTIAL_VOLT, "battery", "voltage"),
-        # Add other sensors as needed
+        EasunSensor(isolar, "battery_current", "Battery Current", ELECTRIC_CURRENT_AMPERE, "battery", "current"),
+        EasunSensor(isolar, "battery_power", "Battery Power", POWER_WATT, "battery", "power"),
+        EasunSensor(isolar, "battery_soc", "Battery State of Charge", PERCENTAGE, "battery", "soc"),
+        EasunSensor(isolar, "battery_temperature", "Battery Temperature", TEMP_CELSIUS, "battery", "temperature"),
+        EasunSensor(isolar, "pv_total_power", "PV Total Power", POWER_WATT, "pv", "total_power"),
+        EasunSensor(isolar, "pv_charging_power", "PV Charging Power", POWER_WATT, "pv", "charging_power"),
+        EasunSensor(isolar, "pv_charging_current", "PV Charging Current", ELECTRIC_CURRENT_AMPERE, "pv", "charging_current"),
+        EasunSensor(isolar, "pv1_voltage", "PV1 Voltage", ELECTRIC_POTENTIAL_VOLT, "pv", "pv1_voltage"),
+        EasunSensor(isolar, "pv1_current", "PV1 Current", ELECTRIC_CURRENT_AMPERE, "pv", "pv1_current"),
+        EasunSensor(isolar, "pv1_power", "PV1 Power", POWER_WATT, "pv", "pv1_power"),
+        EasunSensor(isolar, "pv2_voltage", "PV2 Voltage", ELECTRIC_POTENTIAL_VOLT, "pv", "pv2_voltage"),
+        EasunSensor(isolar, "pv2_current", "PV2 Current", ELECTRIC_CURRENT_AMPERE, "pv", "pv2_current"),
+        EasunSensor(isolar, "pv2_power", "PV2 Power", POWER_WATT, "pv", "pv2_power"),
+        EasunSensor(isolar, "grid_voltage", "Grid Voltage", ELECTRIC_POTENTIAL_VOLT, "grid", "voltage"),
+        EasunSensor(isolar, "grid_power", "Grid Power", POWER_WATT, "grid", "power"),
+        EasunSensor(isolar, "grid_frequency", "Grid Frequency", FREQUENCY_HERTZ, "grid", "frequency"),
+        EasunSensor(isolar, "output_voltage", "Output Voltage", ELECTRIC_POTENTIAL_VOLT, "output", "voltage"),
+        EasunSensor(isolar, "output_current", "Output Current", ELECTRIC_CURRENT_AMPERE, "output", "current"),
+        EasunSensor(isolar, "output_power", "Output Power", POWER_WATT, "output", "power"),
+        EasunSensor(isolar, "output_apparent_power", "Output Apparent Power", POWER_WATT, "output", "apparent_power"),
+        EasunSensor(isolar, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage"),
+        EasunSensor(isolar, "output_frequency", "Output Frequency", FREQUENCY_HERTZ, "output", "frequency"),
     ]
     
-    async_add_entities(entities, True)
+    add_entities(entities, True)
     _LOGGER.debug("Easun Inverter sensors added")
 
 class EasunSensor(SensorEntity):
@@ -67,7 +83,27 @@ class EasunSensor(SensorEntity):
         self._data_type = data_type
         self._data_attr = data_attr
         self._state = None
-        self.update()  # Fetch initial data
+
+    def update(self) -> None:
+        """Fetch new state data for the sensor asynchronously."""
+        _LOGGER.debug(f"Updating sensor {self._name}")
+        try:
+            if self._data_type == "battery":
+                data = self._isolar.get_battery_data()
+            elif self._data_type == "pv":
+                data = self._isolar.get_pv_data()
+            elif self._data_type == "grid":
+                data = self._isolar.get_grid_data()
+            elif self._data_type == "output":
+                data = self._isolar.get_output_data()
+
+            if data:
+                self._state = getattr(data, self._data_attr)
+                _LOGGER.debug(f"Sensor {self._name} updated with state: {self._state}")
+            else:
+                _LOGGER.error(f"Failed to get {self._data_type} data")
+        except Exception as e:
+            _LOGGER.error(f"Error updating sensor {self._name}: {str(e)}")
 
     @property
     def name(self):
@@ -88,24 +124,3 @@ class EasunSensor(SensorEntity):
     def unit_of_measurement(self):
         """Return the unit of measurement."""
         return self._unit
-
-    async def async_update(self) -> None:
-        """Fetch new state data for the sensor."""
-        _LOGGER.debug(f"Updating sensor {self._name}")
-        try:
-            if self._data_type == "battery":
-                data = await self._isolar.get_battery_data()
-            elif self._data_type == "pv":
-                data = await self._isolar.get_pv_data()
-            elif self._data_type == "grid":
-                data = await self._isolar.get_grid_data()
-            elif self._data_type == "output":
-                data = await self._isolar.get_output_data()
-
-            if data:
-                self._state = getattr(data, self._data_attr)
-                _LOGGER.debug(f"Sensor {self._name} updated with state: {self._state}")
-            else:
-                _LOGGER.error(f"Failed to get {self._data_type} data")
-        except Exception as e:
-            _LOGGER.error(f"Error updating sensor {self._name}: {str(e)}")
