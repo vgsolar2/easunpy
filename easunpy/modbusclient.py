@@ -1,9 +1,14 @@
 import socket
 import struct
 import time
+import logging  # Import logging
 
 import pandas as pd
 from easunpy.crc import crc16_modbus
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class ModbusClient:
     def __init__(self, inverter_ip: str, local_ip: str, port: int = 8899):
@@ -29,13 +34,13 @@ class ModbusClient:
     def send(self, hex_command: str, retry_count: int = 2) -> str:
         """Send a Modbus TCP command."""
         command_bytes = bytes.fromhex(hex_command)
-        print(f"Sending command: {hex_command}")
+        logger.info(f"Sending command: {hex_command}")
 
         for attempt in range(retry_count):
-            print(f"Attempt {attempt + 1} of {retry_count}")
+            logger.debug(f"Attempt {attempt + 1} of {retry_count}")
             
             if not self.send_udp_discovery():
-                print("UDP discovery failed")
+                logger.info("UDP discovery failed")
                 time.sleep(1)
                 continue
 
@@ -45,20 +50,20 @@ class ModbusClient:
                 tcp_server.settimeout(10)
                 
                 try:
-                    print(f"Binding to {self.local_ip}:{self.port}")
+                    logger.debug(f"Binding to {self.local_ip}:{self.port}")
                     tcp_server.bind((self.local_ip, self.port))
                     tcp_server.listen(1)
 
-                    print("Waiting for client connection...")
+                    logger.debug("Waiting for client connection...")
                     client_sock, addr = tcp_server.accept()
-                    print(f"Client connected from {addr}")
+                    logger.info(f"Client connected from {addr}")
                     
                     with client_sock:
                         client_sock.settimeout(5)
-                        print("Sending command bytes...")
+                        logger.debug("Sending command bytes...")
                         client_sock.sendall(command_bytes)
 
-                        print("Waiting for response...")
+                        logger.debug("Waiting for response...")
                         response = client_sock.recv(1024)
                         
                         if len(response) >= 6:
@@ -71,19 +76,19 @@ class ModbusClient:
                                 response += chunk
 
                         response_hex = response.hex()
-                        print(f"Received response: {response_hex}")
+                        logger.info(f"Received response: {response_hex}")
                         return response_hex
 
                 except socket.timeout:
-                    print("Socket timeout")
+                    logger.info("Socket timeout")
                     time.sleep(1)
                     continue
                 except Exception as e:
-                    print(f"Error: {str(e)}")
+                    logger.error(f"Error: {str(e)}")
                     time.sleep(1)
                     continue
 
-        print("All retry attempts failed")
+        logger.info("All retry attempts failed")
         return ""
 
 def run_single_request(inverter_ip: str, local_ip: str, request: str):
@@ -192,22 +197,22 @@ def query_register(register_address: int, register_offset: int, register_data_fo
     req = create_request(0x0777, 0x0001, 0x01, 0x03, register_address, register_offset)
     res = run_single_request('192.168.1.130', '192.168.1.144', req)
     registers = get_registers_from_request(req)
-    print(f"Reading registers: {registers}")
+    logger.info(f"Reading registers: {registers}")
     decoded = decode_modbus_response(res, len(registers), data_format=register_data_format)
-    print(decoded)
+    logger.info(decoded)
     
 def debug_modbus_client():
     reqresp = pd.read_csv('easunpy/extracted_requests_responses.csv')
     registers_count = 0
     for i, entry in reqresp.iterrows():
         if entry['Type'] == 'Request':
-            print(f"Request: {entry['Payload']}")
+            logger.debug(f"Request: {entry['Payload']}")
             registers = get_registers_from_request(entry['Payload'])
             registers_count = len(registers)
-            print(registers)
+            logger.info(registers)
         if entry['Type'] == 'Response':
-            print(f"Response: {entry['Payload']}")
-            print(decode_modbus_response(entry['Payload'], registers_count))
+            logger.debug(f"Response: {entry['Payload']}")
+            logger.info(decode_modbus_response(entry['Payload'], registers_count))
 
 def debug_single_register(register_address: int):
     transaction_id = 0x0777
@@ -217,10 +222,10 @@ def debug_single_register(register_address: int):
     register_offset = 1  # Número de registros a leer
     
     command = create_request(transaction_id, protocol_id, unit_id, function_code, register_address, register_offset)
-    print(command)
+    logger.debug(command)
     resp = run_single_request('192.168.1.130', '192.168.1.1144', command)
-    print(resp)
-    print(decode_modbus_response(resp, 1, "Int"))
+    logger.debug(resp)
+    logger.info(decode_modbus_response(resp, 1, "Int"))
      
  
 

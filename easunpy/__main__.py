@@ -9,6 +9,7 @@ from rich.layout import Layout
 from rich.text import Text
 from datetime import datetime
 from .isolar import ISolar, OperatingMode
+import logging
 
 def create_dashboard(inverter: ISolar, status_message: str | Text = "") -> Layout:
     """Create a dashboard layout with inverter data."""
@@ -109,7 +110,7 @@ def create_dashboard(inverter: ISolar, status_message: str | Text = "") -> Layou
 
     return layout
 
-def create_info_layout(inverter_ip: str, local_ip: str, status_message: str = "") -> Layout:
+def create_info_layout(inverter_ip: str, local_ip: str, serial_number: str, status_message: str = "") -> Layout:
     """Create a layout showing connection information."""
     layout = Layout()
     
@@ -120,6 +121,7 @@ def create_info_layout(inverter_ip: str, local_ip: str, status_message: str = ""
     
     info_table.add_row("Inverter IP", inverter_ip)
     info_table.add_row("Local IP", local_ip)
+    info_table.add_row("Serial Number", serial_number)
     info_table.add_row("Status", status_message)
     
     # Add timestamp with right-aligned status
@@ -145,6 +147,20 @@ def create_info_layout(inverter_ip: str, local_ip: str, status_message: str = ""
     return layout
 
 def main():
+    # Configure logging
+    logging.basicConfig(
+        level=logging.ERROR,  # Suppress info and debug logs
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler("easunpy.log"),  # Log to a file
+            # Remove or comment out StreamHandler to prevent console logging
+            # logging.StreamHandler()  # Uncomment this line if you want to log to console as well
+        ]
+    )
+    
+    # Suppress logs from all easunpy modules
+    logging.getLogger('easunpy').setLevel(logging.ERROR)
+
     parser = argparse.ArgumentParser(description='Monitor Easun ISolar Inverter')
     parser.add_argument('--inverter-ip', type=str, required=True, help='Inverter IP address')
     parser.add_argument('--local-ip', type=str, required=True, help='Local IP address')
@@ -157,15 +173,18 @@ def main():
     
     try:
         with Live(console=console, screen=True, refresh_per_second=4) as live:
-            # Show initial connection info
-            layout = create_info_layout(args.inverter_ip, args.local_ip, "Initializing connection...")
-            live.update(layout)
-            
             # Initialize inverter
             inverter = ISolar(args.inverter_ip, args.local_ip)
             
+            # Retrieve serial number
+            serial_number = inverter.get_serial_number()
+            
+            # Show initial connection info
+            layout = create_info_layout(args.inverter_ip, args.local_ip, serial_number, "Initializing connection...")
+            live.update(layout)
+            
             # Show connecting message
-            layout = create_info_layout(args.inverter_ip, args.local_ip, "Connecting to inverter...")
+            layout = create_info_layout(args.inverter_ip, args.local_ip, serial_number, "Connecting to inverter...")
             live.update(layout)
             time.sleep(1)
             
