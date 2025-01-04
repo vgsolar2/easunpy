@@ -20,7 +20,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
 
-from .easunpy.isolar import ISolar
+from easunpy.isolar import ISolar
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
