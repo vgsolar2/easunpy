@@ -1,59 +1,91 @@
-import csv
-from itertools import islice
-import time
+import logging
+from easunpy.isolar import ISolar
+from easunpy.discover import discover_device
+from easunpy.utils import get_local_ip
 
-from easunpy.modbusclient import ModbusClient, get_registers_from_request, decode_modbus_response
-
-def run_all_requests(inverter_ip: str, local_ip: str):
+def debug_inverter_data():
     """
-    Run all Modbus requests from the extracted_requests_responses.csv file.
+    Debug and display inverter data.
+    """
+    # Set up logging for all easunpy modules
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger('easunpy')
+    logger.setLevel(logging.DEBUG)
+
+    # Discover local IP
+    local_ip = get_local_ip()
+    if not local_ip:
+        logger.error("Could not determine local IP address.")
+        return
+
+    logger.debug(f"Local IP: {local_ip}")
+
+    # Discover inverter IP
+    logger.debug("Discovering inverter IP...")
+    device_ip = discover_device()
+    if not device_ip:
+        logger.error("No inverter IPs discovered.")
+        return
+
+    logger.debug(f"Discovered inverter IP: {device_ip}")
+
+    # Initialize inverter
+    inverter = ISolar(device_ip, local_ip)
     
-    Args:
-        inverter_ip (str): IP address of the inverter
-        local_ip (str): Local IP address to bind to
-    """
-    inverter = ModbusClient(inverter_ip=inverter_ip, local_ip=local_ip)
-
-    try:
-        with open('easunpy/extracted_requests_responses.csv', 'r') as csv_file:
-            csv_reader = csv.DictReader(csv_file)
-            while True:
-                rows = list(islice(csv_reader, 2))
-                if not rows:
-                    break
-                
-                if len(rows) != 2:
-                    print("Warning: Found incomplete request/response pair at end of file")
-                    break
-
-                request_row, expected_response_row = rows
-                
-                if request_row['Type'] != 'Request' or expected_response_row['Type'] != 'Response':
-                    print("Error: Expected Request/Response pair, got:", 
-                          f"{request_row['Type']}/{expected_response_row['Type']}")
-                    continue
-
-                hex_command = request_row['Payload']
-                expected_response = expected_response_row['Payload']
-                
-                actual_response = inverter.send(hex_command)
-                if actual_response:
-                    print(f"{hex_command}:{actual_response}")
-                    print(get_registers_from_request(hex_command))
-                    print(decode_modbus_response(actual_response, len(get_registers_from_request(hex_command)), "Int"))
-                else:
-                    print("No response received")
-                
-                # Delay between requests
-                time.sleep(1)
-
-    except FileNotFoundError:
-        print("Error: 'extracted_requests_responses.csv' file not found.")
-    except KeyboardInterrupt:
-        print("\nOperation interrupted by user")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
+    # Retrieve serial number
+    serial_number = inverter.get_serial_number()
+    logger.debug(f"Serial Number: {serial_number}")
+    
+    # Get all the data
+    battery = inverter.get_battery_data()
+    pv = inverter.get_pv_data()
+    grid = inverter.get_grid_data()
+    output = inverter.get_output_data()
+    system = inverter.get_operating_mode()
+    
+    # Display data in plain text
+    print("Inverter Data Debugging:")
+    print(f"Serial Number: {serial_number}")
+    
+    if battery:
+        print("Battery Data:")
+        print(f"  Voltage: {battery.voltage}V")
+        print(f"  Current: {battery.current}A")
+        print(f"  Power: {battery.power}W")
+        print(f"  State of Charge: {battery.soc}%")
+        print(f"  Temperature: {battery.temperature}°C")
+    
+    if pv:
+        print("PV Data:")
+        print(f"  Total Power: {pv.total_power}W")
+        print(f"  Charging Power: {pv.charging_power}W")
+        print(f"  Charging Current: {pv.charging_current}A")
+        print(f"  PV1 Voltage: {pv.pv1_voltage}V")
+        print(f"  PV1 Current: {pv.pv1_current}A")
+        print(f"  PV1 Power: {pv.pv1_power}W")
+        print(f"  PV2 Voltage: {pv.pv2_voltage}V")
+        print(f"  PV2 Current: {pv.pv2_current}A")
+        print(f"  PV2 Power: {pv.pv2_power}W")
+    
+    if grid:
+        print("Grid Data:")
+        print(f"  Voltage: {grid.voltage}V")
+        print(f"  Power: {grid.power}W")
+        print(f"  Frequency: {grid.frequency/100:.2f}Hz")
+    
+    if output:
+        print("Output Data:")
+        print(f"  Voltage: {output.voltage}V")
+        print(f"  Current: {output.current}A")
+        print(f"  Power: {output.power}W")
+        print(f"  Apparent Power: {output.apparent_power}VA")
+        print(f"  Load Percentage: {output.load_percentage}%")
+        print(f"  Frequency: {output.frequency/100:.2f}Hz")
+    
+    if system:
+        print("System Status:")
+        print(f"  Operating Mode: {system.mode_name}")
 
 if __name__ == '__main__':
     # Example usage
-    run_all_requests('192.168.1.130', '192.168.1.135')
+    debug_inverter_data()

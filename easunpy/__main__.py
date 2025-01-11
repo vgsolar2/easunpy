@@ -7,11 +7,26 @@ from rich.table import Table
 from rich.console import Console
 from rich.layout import Layout
 from rich.text import Text
+from rich.panel import Panel
 from datetime import datetime
 from .isolar import ISolar, OperatingMode
+from .utils import get_local_ip  # Import the get_local_ip function
 import logging
 
-def create_dashboard(inverter: ISolar, status_message: str | Text = "") -> Layout:
+# Custom log handler to capture logs
+class RichLogHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.logs = []
+
+    def emit(self, record):
+        log_entry = self.format(record)
+        self.logs.append(log_entry)
+        # Keep only the last 10 log entries
+        if len(self.logs) > 10:
+            self.logs.pop(0)
+
+def create_dashboard(inverter: ISolar, status_message: str | Text = "", log_handler: RichLogHandler = None) -> Layout:
     """Create a dashboard layout with inverter data."""
     layout = Layout()
     
@@ -108,6 +123,13 @@ def create_dashboard(inverter: ISolar, status_message: str | Text = "") -> Layou
         Layout(grid_output_table, name="grid")
     )
 
+    # Add log panel if log_handler is provided
+    if log_handler:
+        log_panel = Panel("\n".join(log_handler.logs), title="Logs", style="white on black")
+        layout["content"].split_row(
+            Layout(log_panel, name="logs", size=10)
+        )
+
     return layout
 
 def create_info_layout(inverter_ip: str, local_ip: str, serial_number: str, status_message: str = "") -> Layout:
@@ -149,7 +171,7 @@ def create_info_layout(inverter_ip: str, local_ip: str, serial_number: str, stat
 def main():
     # Configure logging
     logging.basicConfig(
-        level=logging.ERROR,  # Suppress info and debug logs
+        level=logging.DEBUG,  # Set to DEBUG to capture all logs
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler("easunpy.log"),  # Log to a file
@@ -159,61 +181,79 @@ def main():
     )
     
     # Suppress logs from all easunpy modules
-    logging.getLogger('easunpy').setLevel(logging.ERROR)
+    logging.getLogger('easunpy').setLevel(logging.DEBUG)
 
     parser = argparse.ArgumentParser(description='Monitor Easun ISolar Inverter')
-    parser.add_argument('--inverter-ip', type=str, required=True, help='Inverter IP address')
-    parser.add_argument('--local-ip', type=str, required=True, help='Local IP address')
+    parser.add_argument('--inverter-ip', type=str, help='Inverter IP address')
+    # Remove the local-ip argument since we are now using get_local_ip
+    # parser.add_argument('--local-ip', type=str, required=True, help='Local IP address')
     parser.add_argument('--interval', type=int, default=5, help='Update interval in seconds')
     parser.add_argument('--live', action='store_true', help='Live mode - update continuously')
     
     args = parser.parse_args()
     
+    # Discover local IP
+    local_ip = get_local_ip()
+    if not local_ip:
+        print("Error: Could not determine local IP address")
+        return
+    
+    # Discover inverter IP if not provided
+    if not args.inverter_ip:
+        from easunpy.discover import discover_device
+        print("Discovering inverter IP...")
+        device_ip = discover_device()
+        if device_ip:
+            args.inverter_ip = device_ip
+            print(f"Discovered inverter IP: {args.inverter_ip}")
+        else:
+            print("Error: Could not discover inverter IP")
+            return
+    
     console = Console()
+    log_handler = RichLogHandler()
+    logging.getLogger().addHandler(log_handler)
     
     try:
         with Live(console=console, screen=True, refresh_per_second=4) as live:
             # Initialize inverter
-            inverter = ISolar(args.inverter_ip, args.local_ip)
+            inverter = ISolar(args.inverter_ip, local_ip)
             
             # Retrieve serial number
             serial_number = inverter.get_serial_number()
             
             # Show initial connection info
-            layout = create_info_layout(args.inverter_ip, args.local_ip, serial_number, "Initializing connection...")
+            layout = create_info_layout(args.inverter_ip, local_ip, serial_number, "Initializing connection...")
             live.update(layout)
             
             # Show connecting message
-            layout = create_info_layout(args.inverter_ip, args.local_ip, serial_number, "Connecting to inverter...")
+            layout = create_info_layout(args.inverter_ip, local_ip, serial_number, "Connecting to inverter...")
             live.update(layout)
             time.sleep(1)
             
             while True:
-                if args.live:
-                    # In live mode, just update continuously
-                    status = Text("● LIVE", style="green bold")  # Added a dot for better visibility
-                    layout = create_dashboard(inverter, status)
-                    live.update(layout)
-                    time.sleep(0.5)
-                else:
-                    # Normal mode with interval
-                    layout = create_dashboard(inverter, "Reading inverter data...")
+                # Normal mode with interval
+                layout = create_dashboard(inverter, "Reading inverter data...", log_handler)
+                live.update(layout)
+                time.sleep(1)
+                
+                layout = create_dashboard(inverter, "", log_handler)
+                live.update(layout)
+                
+                # Waiting cycle
+                for remaining in range(args.interval - 1, 0, -1):
+                    layout = create_dashboard(inverter, f"Next update in {remaining} seconds...", log_handler)
                     live.update(layout)
                     time.sleep(1)
-                    
-                    layout = create_dashboard(inverter, "")
-                    live.update(layout)
-                    
-                    # Waiting cycle
-                    for remaining in range(args.interval - 1, 0, -1):
-                        layout = create_dashboard(inverter, f"Next update in {remaining} seconds...")
-                        live.update(layout)
-                        time.sleep(1)
                 
     except KeyboardInterrupt:
         console.print("\nMonitoring stopped by user")
     except Exception as e:
         console.print(f"\n[red]Error: {str(e)}")
+        # Implement a simple backoff strategy
+        backoff_time = min(args.interval * 2, 60)  # Double the interval, max 60 seconds
+        console.print(f"\n[red]Backing off for {backoff_time} seconds due to error.")
+        time.sleep(backoff_time)
 
 if __name__ == "__main__":
     main() 
