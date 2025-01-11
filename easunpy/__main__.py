@@ -7,35 +7,30 @@ from rich.table import Table
 from rich.console import Console
 from rich.layout import Layout
 from rich.text import Text
-from rich.panel import Panel
 from datetime import datetime
 from .isolar import ISolar, OperatingMode
 from .utils import get_local_ip  # Import the get_local_ip function
 import logging
 
-# Custom log handler to capture logs
-class RichLogHandler(logging.Handler):
+class InverterData:
     def __init__(self):
-        super().__init__()
-        self.logs = []
+        # Initialize with empty values
+        self.battery = None
+        self.pv = None
+        self.grid = None
+        self.output = None
+        self.system = None
 
-    def emit(self, record):
-        log_entry = self.format(record)
-        self.logs.append(log_entry)
-        # Keep only the last 10 log entries
-        if len(self.logs) > 10:
-            self.logs.pop(0)
-
-def create_dashboard(inverter: ISolar, status_message: str | Text = "", log_handler: RichLogHandler = None) -> Layout:
+def create_dashboard(inverter_data: InverterData, status_message: str | Text = "") -> Layout:
     """Create a dashboard layout with inverter data."""
     layout = Layout()
     
-    # Get all the data
-    battery = inverter.get_battery_data()
-    pv = inverter.get_pv_data()
-    grid = inverter.get_grid_data()
-    output = inverter.get_output_data()
-    system = inverter.get_operating_mode()
+    # Use the data from the InverterData instance
+    battery = inverter_data.battery
+    pv = inverter_data.pv
+    grid = inverter_data.grid
+    output = inverter_data.output
+    system = inverter_data.system
     
     # Create tables for each section
     system_table = Table(title="System Status")
@@ -123,13 +118,6 @@ def create_dashboard(inverter: ISolar, status_message: str | Text = "", log_hand
         Layout(grid_output_table, name="grid")
     )
 
-    # Add log panel if log_handler is provided
-    if log_handler:
-        log_panel = Panel("\n".join(log_handler.logs), title="Logs", style="white on black")
-        layout["content"].split_row(
-            Layout(log_panel, name="logs", size=10)
-        )
-
     return layout
 
 def create_info_layout(inverter_ip: str, local_ip: str, serial_number: str, status_message: str = "") -> Layout:
@@ -171,17 +159,12 @@ def create_info_layout(inverter_ip: str, local_ip: str, serial_number: str, stat
 def main():
     # Configure logging
     logging.basicConfig(
-        level=logging.DEBUG,  # Set to DEBUG to capture all logs
+        level=logging.ERROR,  # Set to DEBUG to capture all logs
         format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler("easunpy.log"),  # Log to a file
-            # Remove or comment out StreamHandler to prevent console logging
-            # logging.StreamHandler()  # Uncomment this line if you want to log to console as well
-        ]
     )
     
     # Suppress logs from all easunpy modules
-    logging.getLogger('easunpy').setLevel(logging.DEBUG)
+    logging.getLogger('easunpy').setLevel(logging.ERROR)
 
     parser = argparse.ArgumentParser(description='Monitor Easun ISolar Inverter')
     parser.add_argument('--inverter-ip', type=str, help='Inverter IP address')
@@ -211,38 +194,48 @@ def main():
             return
     
     console = Console()
-    log_handler = RichLogHandler()
-    logging.getLogger().addHandler(log_handler)
     
     try:
         with Live(console=console, screen=True, refresh_per_second=4) as live:
             # Initialize inverter
             inverter = ISolar(args.inverter_ip, local_ip)
             
-            # Retrieve serial number
-            serial_number = inverter.get_serial_number()
-            
             # Show initial connection info
-            layout = create_info_layout(args.inverter_ip, local_ip, serial_number, "Initializing connection...")
+            layout = create_info_layout(args.inverter_ip, local_ip, "XXXXXXXX", "Initializing connection...")
             live.update(layout)
             
-            # Show connecting message
-            layout = create_info_layout(args.inverter_ip, local_ip, serial_number, "Connecting to inverter...")
-            live.update(layout)
-            time.sleep(1)
+            # Initialize empty data
+            inverter_data = InverterData()
             
             while True:
-                # Normal mode with interval
-                layout = create_dashboard(inverter, "Reading inverter data...", log_handler)
-                live.update(layout)
-                time.sleep(1)
                 
-                layout = create_dashboard(inverter, "", log_handler)
+                layout = create_dashboard(inverter_data, "Updating system data...")
+                live.update(layout)
+                
+                inverter_data.system = inverter.get_operating_mode()
+                
+                layout = create_dashboard(inverter_data, "Updating battery data...")
+                live.update(layout)
+                inverter_data.battery = inverter.get_battery_data()
+                
+                layout = create_dashboard(inverter_data, "Updating grid data...")
+                live.update(layout)
+                inverter_data.grid = inverter.get_grid_data()
+                
+                layout = create_dashboard(inverter_data, "Updating output data...")
+                live.update(layout)
+                inverter_data.output = inverter.get_output_data()
+                
+                layout = create_dashboard(inverter_data, "Updating PV data...")
+                live.update(layout)
+                inverter_data.pv = inverter.get_pv_data()
+                
+                layout = create_dashboard(inverter_data, "Update done")
                 live.update(layout)
                 
                 # Waiting cycle
                 for remaining in range(args.interval - 1, 0, -1):
-                    layout = create_dashboard(inverter, f"Next update in {remaining} seconds...", log_handler)
+                    layout = create_dashboard(inverter_data, f"Next update in {remaining} seconds...")
                     live.update(layout)
                     time.sleep(1)
                 

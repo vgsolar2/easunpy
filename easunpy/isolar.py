@@ -172,18 +172,6 @@ class ISolar:
             frequency=freq[0]  # Already in the correct format (5000 = 50.00Hz)
         )
 
-    def get_serial_number(self) -> str:
-        """Get inverter serial number (registers 186-198)."""
-        values = self._read_registers(186, 13)
-        if not values:
-            return ""
-        
-        try:
-            serial = ''.join(chr(value >> 8) + chr(value & 0xFF) for value in values)
-            return serial.replace('\x00', '').strip()
-        except:
-            return ""
-
     def get_operating_mode(self) -> Optional[SystemStatus]:
         """Get system operating mode (register 600)."""
         values = self._read_registers(600, 1)
@@ -205,7 +193,6 @@ class ISolar:
     def is_connected(self) -> bool:
         """Check if the inverter is connected by attempting to retrieve the serial number."""
         try:
-            serial_number = self.get_serial_number()
-            return bool(serial_number)
+            return True
         except Exception:
             return False

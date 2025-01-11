@@ -32,10 +32,6 @@ def debug_inverter_data():
     # Initialize inverter
     inverter = ISolar(device_ip, local_ip)
     
-    # Retrieve serial number
-    serial_number = inverter.get_serial_number()
-    logger.debug(f"Serial Number: {serial_number}")
-    
     # Get all the data
     battery = inverter.get_battery_data()
     pv = inverter.get_pv_data()

@@ -20,7 +20,6 @@ class ModbusClient:
     def send_udp_discovery(self) -> bool:
         """Perform UDP discovery to initialize the inverter communication."""
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_sock:
-            udp_sock.settimeout(5)
             udp_message = f"set>server={self.local_ip}:{self.port};"
             try:
                 logger.debug(f"Sending UDP discovery message to {self.inverter_ip}:58899")
@@ -50,7 +49,6 @@ class ModbusClient:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_server:
                 tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
-                tcp_server.settimeout(15)
                 
                 try:
                     # Attempt to bind to the local IP and port
@@ -63,7 +61,6 @@ class ModbusClient:
                     logger.info(f"Client connected from {addr}")
                     
                     with client_sock:
-                        client_sock.settimeout(15)
                         logger.debug("Sending command bytes...")
                         client_sock.sendall(command_bytes)
 
