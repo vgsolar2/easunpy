@@ -1,6 +1,6 @@
 """Command-line interface for EasunPy"""
 
-import time
+import asyncio
 import argparse
 from rich.live import Live
 from rich.table import Table
@@ -8,13 +8,12 @@ from rich.console import Console
 from rich.layout import Layout
 from rich.text import Text
 from datetime import datetime
-from .isolar import ISolar, OperatingMode
-from .utils import get_local_ip  # Import the get_local_ip function
+from .async_isolar import AsyncISolar, OperatingMode
+from .utils import get_local_ip
 import logging
 
 class InverterData:
     def __init__(self):
-        # Initialize with empty values
         self.battery = None
         self.pv = None
         self.grid = None
@@ -156,32 +155,27 @@ def create_info_layout(inverter_ip: str, local_ip: str, serial_number: str, stat
 
     return layout
 
-def main():
+async def main():
     # Configure logging
     logging.basicConfig(
-        level=logging.ERROR,  # Set to DEBUG to capture all logs
+        level=logging.ERROR,
         format='%(asctime)s - %(levelname)s - %(message)s',
     )
     
-    # Suppress logs from all easunpy modules
     logging.getLogger('easunpy').setLevel(logging.ERROR)
 
     parser = argparse.ArgumentParser(description='Monitor Easun ISolar Inverter')
     parser.add_argument('--inverter-ip', type=str, help='Inverter IP address')
-    # Remove the local-ip argument since we are now using get_local_ip
-    # parser.add_argument('--local-ip', type=str, required=True, help='Local IP address')
     parser.add_argument('--interval', type=int, default=5, help='Update interval in seconds')
     parser.add_argument('--live', action='store_true', help='Live mode - update continuously')
     
     args = parser.parse_args()
     
-    # Discover local IP
     local_ip = get_local_ip()
     if not local_ip:
         print("Error: Could not determine local IP address")
         return
     
-    # Discover inverter IP if not provided
     if not args.inverter_ip:
         from easunpy.discover import discover_device
         print("Discovering inverter IP...")
@@ -197,56 +191,50 @@ def main():
     
     try:
         with Live(console=console, screen=True, refresh_per_second=4) as live:
-            # Initialize inverter
-            inverter = ISolar(args.inverter_ip, local_ip)
+            inverter = AsyncISolar(args.inverter_ip, local_ip)
             
-            # Show initial connection info
             layout = create_info_layout(args.inverter_ip, local_ip, "XXXXXXXX", "Initializing connection...")
             live.update(layout)
             
-            # Initialize empty data
             inverter_data = InverterData()
             
             while True:
-                
                 layout = create_dashboard(inverter_data, "Updating system data...")
                 live.update(layout)
                 
-                inverter_data.system = inverter.get_operating_mode()
+                inverter_data.system = await inverter.get_operating_mode()
                 
                 layout = create_dashboard(inverter_data, "Updating battery data...")
                 live.update(layout)
-                inverter_data.battery = inverter.get_battery_data()
+                inverter_data.battery = await inverter.get_battery_data()
                 
                 layout = create_dashboard(inverter_data, "Updating grid data...")
                 live.update(layout)
-                inverter_data.grid = inverter.get_grid_data()
+                inverter_data.grid = await inverter.get_grid_data()
                 
                 layout = create_dashboard(inverter_data, "Updating output data...")
                 live.update(layout)
-                inverter_data.output = inverter.get_output_data()
+                inverter_data.output = await inverter.get_output_data()
                 
                 layout = create_dashboard(inverter_data, "Updating PV data...")
                 live.update(layout)
-                inverter_data.pv = inverter.get_pv_data()
+                inverter_data.pv = await inverter.get_pv_data()
                 
                 layout = create_dashboard(inverter_data, "Update done")
                 live.update(layout)
                 
-                # Waiting cycle
                 for remaining in range(args.interval - 1, 0, -1):
                     layout = create_dashboard(inverter_data, f"Next update in {remaining} seconds...")
                     live.update(layout)
-                    time.sleep(1)
+                    await asyncio.sleep(1)
                 
     except KeyboardInterrupt:
         console.print("\nMonitoring stopped by user")
     except Exception as e:
         console.print(f"\n[red]Error: {str(e)}")
-        # Implement a simple backoff strategy
-        backoff_time = min(args.interval * 2, 60)  # Double the interval, max 60 seconds
+        backoff_time = min(args.interval * 2, 60)
         console.print(f"\n[red]Backing off for {backoff_time} seconds due to error.")
-        time.sleep(backoff_time)
+        await asyncio.sleep(backoff_time)
 
 if __name__ == "__main__":
-    main() 
+    asyncio.run(main()) 
