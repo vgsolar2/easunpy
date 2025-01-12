@@ -1,11 +1,12 @@
+import asyncio
 import logging
-from easunpy.isolar import ISolar
+from easunpy.async_isolar import AsyncISolar
 from easunpy.discover import discover_device
 from easunpy.utils import get_local_ip
 
-def debug_inverter_data():
+async def debug_inverter_data_async():
     """
-    Debug and display inverter data.
+    Debug and display inverter data asynchronously.
     """
     # Set up logging for all easunpy modules
     logging.basicConfig(level=logging.DEBUG)
@@ -30,18 +31,17 @@ def debug_inverter_data():
     logger.debug(f"Discovered inverter IP: {device_ip}")
 
     # Initialize inverter
-    inverter = ISolar(device_ip, local_ip)
+    inverter = AsyncISolar(device_ip, local_ip)
     
-    # Get all the data
-    battery = inverter.get_battery_data()
-    pv = inverter.get_pv_data()
-    grid = inverter.get_grid_data()
-    output = inverter.get_output_data()
-    system = inverter.get_operating_mode()
+    # Get all the data asynchronously
+    battery = await inverter.get_battery_data()
+    pv = await inverter.get_pv_data()
+    grid = await inverter.get_grid_data()
+    output = await inverter.get_output_data()
+    system = await inverter.get_operating_mode()
     
     # Display data in plain text
     print("Inverter Data Debugging:")
-    print(f"Serial Number: {serial_number}")
     
     if battery:
         print("Battery Data:")
@@ -83,5 +83,5 @@ def debug_inverter_data():
         print(f"  Operating Mode: {system.mode_name}")
 
 if __name__ == '__main__':
-    # Example usage
-    debug_inverter_data()
+    # Run the async debug function
+    asyncio.run(debug_inverter_data_async())

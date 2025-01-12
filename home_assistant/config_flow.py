@@ -6,6 +6,8 @@ from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 
 from . import DOMAIN
+from easunpy.discover import discover_device
+from easunpy.utils import get_local_ip
 
 class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Easun Inverter."""
@@ -27,11 +29,18 @@ class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 return self.async_create_entry(title="Easun Inverter", data=user_input)
 
+        # Attempt to discover the IPs
+        inverter_ip = discover_device()
+        local_ip = get_local_ip()
+
+        if not inverter_ip or not local_ip:
+            errors["base"] = "discovery_failed"
+
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required("inverter_ip"): str,
-                vol.Required("local_ip"): str,
+                vol.Required("inverter_ip", default=inverter_ip): str,
+                vol.Required("local_ip", default=local_ip): str,
             }),
             errors=errors
         ) 
