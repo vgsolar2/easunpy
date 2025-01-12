@@ -111,7 +111,6 @@ class ModbusInverter:
 
     def send_udp_discovery(self, device_ip: str, local_ip: str) -> Optional[str]:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_sock:
-            udp_sock.settimeout(5)
             udp_message = f"set>server={local_ip}:8899;"
             print(f"Sending UDP discovery: {udp_message}")
             udp_sock.sendto(udp_message.encode(), (device_ip, 58899))
