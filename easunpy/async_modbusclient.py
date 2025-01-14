@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import struct
-from easunpy.crc import crc16_modbus
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -43,7 +41,7 @@ class AsyncModbusClient:
 
         try:
             # Wait for a response or timeout
-            await asyncio.wait_for(protocol.response_received, timeout=5)
+            await asyncio.wait_for(protocol.response_received, timeout=1)
             return protocol.response_received.result()
         except asyncio.TimeoutError:
             logger.error("Timeout waiting for UDP response")
@@ -51,7 +49,7 @@ class AsyncModbusClient:
         finally:
             transport.close()
 
-    async def send(self, hex_command: str, retry_count: int = 2) -> str:
+    async def send(self, hex_command: str, retry_count: int = 5) -> str:
         """Send a Modbus TCP command asynchronously."""
         command_bytes = bytes.fromhex(hex_command)
         logger.info(f"Sending command: {hex_command}")
@@ -76,7 +74,8 @@ class AsyncModbusClient:
                 async with server:
                     logger.debug("Waiting for client connection...")
                     try:
-                        await asyncio.wait_for(response_future, timeout=5)  # Set a timeout for client connection
+                        # Use a future to wait for the response
+                        await asyncio.wait_for(response_future, timeout=2)
                     except asyncio.TimeoutError:
                         logger.error("Timeout waiting for client connection")
                         continue  # Retry the UDP discovery and server setup

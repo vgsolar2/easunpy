@@ -1,62 +1,10 @@
 import logging
-from dataclasses import dataclass
 from typing import List, Optional
 from .modbusclient import ModbusClient, create_request, decode_modbus_response
-from enum import Enum
+from easunpy.models import BatteryData, PVData, GridData, OutputData, OperatingMode, SystemStatus
 
 # Set up logging
 logger = logging.getLogger(__name__)
-
-@dataclass
-class BatteryData:
-    voltage: float
-    current: float
-    power: int
-    soc: int
-    temperature: int
-
-@dataclass
-class PVData:
-    total_power: int
-    charging_power: int
-    charging_current: int
-    temperature: int
-    pv1_voltage: float
-    pv1_current: float
-    pv1_power: int
-    pv2_voltage: float
-    pv2_current: float
-    pv2_power: int
-
-@dataclass
-class GridData:
-    voltage: float
-    power: int
-    frequency: int
-
-@dataclass
-class OutputData:
-    voltage: float
-    current: float
-    power: int
-    apparent_power: int
-    load_percentage: int
-    frequency: int
-
-class OperatingMode(Enum):
-    STANDBY = 0
-    GRID = 1
-    BATTERY = 2
-    FAULT = 3
-    HYBRID = 4
-    CHARGING = 5
-    BYPASS = 6
-    UPS = 7
-
-@dataclass
-class SystemStatus:
-    operating_mode: OperatingMode
-    mode_name: str
 
 class ISolar:
     def __init__(self, inverter_ip: str, local_ip: str):

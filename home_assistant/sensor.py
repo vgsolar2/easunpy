@@ -2,26 +2,25 @@
 from datetime import timedelta
 import logging
 from typing import Optional
+import asyncio
 
 from homeassistant.components.sensor import (
     SensorEntity,
-    SensorDeviceClass,
-    SensorStateClass,
 )
 from homeassistant.const import (
+    UnitOfPower,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfTemperature,
+    UnitOfFrequency,
     PERCENTAGE,
-    POWER_WATT,
-    ELECTRIC_CURRENT_AMPERE,
-    ELECTRIC_POTENTIAL_VOLT,
-    TEMP_CELSIUS,
-    FREQUENCY_HERTZ,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.event import async_track_time_interval
 
-from easunpy.isolar import ISolar
+from easunpy.async_isolar import AsyncISolar
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=60)
@@ -32,17 +31,19 @@ class DataCollector:
     def __init__(self, isolar):
         self._isolar = isolar
         self._data = {}
+        self._lock = asyncio.Lock()  # Initialize the lock
 
-    def update_data(self):
-        """Fetch all data from the inverter."""
-        try:
-            self._data['battery'] = self._isolar.get_battery_data()
-            self._data['pv'] = self._isolar.get_pv_data()
-            self._data['grid'] = self._isolar.get_grid_data()
-            self._data['output'] = self._isolar.get_output_data()
-            _LOGGER.debug("DataCollector updated all data")
-        except Exception as e:
-            _LOGGER.error(f"Error updating data: {str(e)}")
+    async def update_data(self):
+        """Fetch all data from the inverter asynchronously."""
+        async with self._lock:  # Use the lock to ensure only one request at a time
+            try:
+                self._data['battery'] = await self._isolar.get_battery_data()
+                self._data['pv'] = await self._isolar.get_pv_data()
+                self._data['grid'] = await self._isolar.get_grid_data()
+                self._data['output'] = await self._isolar.get_output_data()
+                _LOGGER.debug("DataCollector updated all data")
+            except Exception as e:
+                _LOGGER.error(f"Error updating data: {str(e)}")
 
     def get_data(self, data_type):
         """Get data for a specific type."""
@@ -62,44 +63,55 @@ async def async_setup_entry(
         _LOGGER.error("Missing inverter IP or local IP in config entry")
         return
     
-    isolar = ISolar(inverter_ip=inverter_ip, local_ip=local_ip)
-    _LOGGER.debug(f"ISolar instance created with IP: {inverter_ip}")
+    isolar = AsyncISolar(inverter_ip=inverter_ip, local_ip=local_ip)
+    _LOGGER.debug(f"AsyncISolar instance created with IP: {inverter_ip}")
 
     data_collector = DataCollector(isolar)
     
-    # Schedule periodic updates every 30 seconds
+    # Schedule periodic updates every 60 seconds
+    is_updating = False  # Flag to track if an update is in progress
+
     async def update_data_collector(now):
         """Update data collector."""
-        _LOGGER.debug("Updating data collector")
-        data_collector.update_data()
+        nonlocal is_updating
+        if is_updating:
+            _LOGGER.debug("Update already in progress, skipping this cycle")
+            return
 
-    async_track_time_interval(hass, update_data_collector, timedelta(seconds=30))
+        _LOGGER.debug("Starting data collector update")
+        is_updating = True
+        try:
+            await data_collector.update_data()
+        finally:
+            is_updating = False
+            _LOGGER.debug("Data collector update finished")
 
+    async_track_time_interval(hass, update_data_collector, SCAN_INTERVAL)
 
     entities = [
-        EasunSensor(data_collector, "battery_voltage", "Battery Voltage", ELECTRIC_POTENTIAL_VOLT, "battery", "voltage"),
-        EasunSensor(data_collector, "battery_current", "Battery Current", ELECTRIC_CURRENT_AMPERE, "battery", "current"),
-        EasunSensor(data_collector, "battery_power", "Battery Power", POWER_WATT, "battery", "power"),
+        EasunSensor(data_collector, "battery_voltage", "Battery Voltage", UnitOfElectricPotential.VOLT, "battery", "voltage"),
+        EasunSensor(data_collector, "battery_current", "Battery Current", UnitOfElectricCurrent.AMPERE, "battery", "current"),
+        EasunSensor(data_collector, "battery_power", "Battery Power", UnitOfPower.WATT, "battery", "power"),
         EasunSensor(data_collector, "battery_soc", "Battery State of Charge", PERCENTAGE, "battery", "soc"),
-        EasunSensor(data_collector, "battery_temperature", "Battery Temperature", TEMP_CELSIUS, "battery", "temperature"),
-        EasunSensor(data_collector, "pv_total_power", "PV Total Power", POWER_WATT, "pv", "total_power"),
-        EasunSensor(data_collector, "pv_charging_power", "PV Charging Power", POWER_WATT, "pv", "charging_power"),
-        EasunSensor(data_collector, "pv_charging_current", "PV Charging Current", ELECTRIC_CURRENT_AMPERE, "pv", "charging_current"),
-        EasunSensor(data_collector, "pv1_voltage", "PV1 Voltage", ELECTRIC_POTENTIAL_VOLT, "pv", "pv1_voltage"),
-        EasunSensor(data_collector, "pv1_current", "PV1 Current", ELECTRIC_CURRENT_AMPERE, "pv", "pv1_current"),
-        EasunSensor(data_collector, "pv1_power", "PV1 Power", POWER_WATT, "pv", "pv1_power"),
-        EasunSensor(data_collector, "pv2_voltage", "PV2 Voltage", ELECTRIC_POTENTIAL_VOLT, "pv", "pv2_voltage"),
-        EasunSensor(data_collector, "pv2_current", "PV2 Current", ELECTRIC_CURRENT_AMPERE, "pv", "pv2_current"),
-        EasunSensor(data_collector, "pv2_power", "PV2 Power", POWER_WATT, "pv", "pv2_power"),
-        EasunSensor(data_collector, "grid_voltage", "Grid Voltage", ELECTRIC_POTENTIAL_VOLT, "grid", "voltage"),
-        EasunSensor(data_collector, "grid_power", "Grid Power", POWER_WATT, "grid", "power"),
-        EasunSensor(data_collector, "grid_frequency", "Grid Frequency", FREQUENCY_HERTZ, "grid", "frequency"),
-        EasunSensor(data_collector, "output_voltage", "Output Voltage", ELECTRIC_POTENTIAL_VOLT, "output", "voltage"),
-        EasunSensor(data_collector, "output_current", "Output Current", ELECTRIC_CURRENT_AMPERE, "output", "current"),
-        EasunSensor(data_collector, "output_power", "Output Power", POWER_WATT, "output", "power"),
-        EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", POWER_WATT, "output", "apparent_power"),
+        EasunSensor(data_collector, "battery_temperature", "Battery Temperature", UnitOfTemperature.CELSIUS, "battery", "temperature"),
+        EasunSensor(data_collector, "pv_total_power", "PV Total Power", UnitOfPower.WATT, "pv", "total_power"),
+        EasunSensor(data_collector, "pv_charging_power", "PV Charging Power", UnitOfPower.WATT, "pv", "charging_power"),
+        EasunSensor(data_collector, "pv_charging_current", "PV Charging Current", UnitOfElectricCurrent.AMPERE, "pv", "charging_current"),
+        EasunSensor(data_collector, "pv1_voltage", "PV1 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv1_voltage"),
+        EasunSensor(data_collector, "pv1_current", "PV1 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv1_current"),
+        EasunSensor(data_collector, "pv1_power", "PV1 Power", UnitOfPower.WATT, "pv", "pv1_power"),
+        EasunSensor(data_collector, "pv2_voltage", "PV2 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv2_voltage"),
+        EasunSensor(data_collector, "pv2_current", "PV2 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv2_current"),
+        EasunSensor(data_collector, "pv2_power", "PV2 Power", UnitOfPower.WATT, "pv", "pv2_power"),
+        EasunSensor(data_collector, "grid_voltage", "Grid Voltage", UnitOfElectricPotential.VOLT, "grid", "voltage"),
+        EasunSensor(data_collector, "grid_power", "Grid Power", UnitOfPower.WATT, "grid", "power"),
+        EasunSensor(data_collector, "grid_frequency", "Grid Frequency", UnitOfFrequency.HERTZ, "grid", "frequency"),
+        EasunSensor(data_collector, "output_voltage", "Output Voltage", UnitOfElectricPotential.VOLT, "output", "voltage"),
+        EasunSensor(data_collector, "output_current", "Output Current", UnitOfElectricCurrent.AMPERE, "output", "current"),
+        EasunSensor(data_collector, "output_power", "Output Power", UnitOfPower.WATT, "output", "power"),
+        EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfPower.WATT, "output", "apparent_power"),
         EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage"),
-        EasunSensor(data_collector, "output_frequency", "Output Frequency", FREQUENCY_HERTZ, "output", "frequency"),
+        EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency"),
     ]
     
     add_entities(entities, True)

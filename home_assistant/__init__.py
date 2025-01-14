@@ -4,14 +4,15 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 import logging
+from homeassistant.helpers.typing import ConfigType
 
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "easun_inverter"
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Easun Inverter component."""
-    hass.data.setdefault(DOMAIN, {})
+    _LOGGER.debug("Setting up Easun Inverter component")
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -19,12 +20,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("Setting up Easun Inverter from config entry")
     
     # Forward the setup to the sensor platform
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setup(entry, "sensor")
-    )
+    await hass.config_entries.async_forward_entry_setup(entry, "sensor")
     
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, ["sensor"]) 
+    _LOGGER.debug("Unloading Easun Inverter config entry")
+    
+    # Unload the sensor platform
+    unload_ok = await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    
+    return unload_ok 
