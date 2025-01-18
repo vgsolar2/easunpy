@@ -50,8 +50,8 @@ class AsyncISolar:
         if not pv_general or len(pv_general) != 4:
             return None
 
-        pv1_data = await self._read_registers(346, 8)
-        if not pv1_data or len(pv1_data) != 8:
+        pv1_data = await self._read_registers(351, 3)
+        if not pv1_data or len(pv1_data) != 3:
             return None
 
         pv2_data = await self._read_registers(389, 3)
@@ -63,9 +63,9 @@ class AsyncISolar:
             charging_power=pv_general[1],
             charging_current=pv_general[2] / 10.0,
             temperature=pv_general[3],
-            pv1_voltage=pv1_data[5] / 10.0,
-            pv1_current=pv1_data[6] / 10.0,
-            pv1_power=pv1_data[7],
+            pv1_voltage=pv1_data[0] / 10.0,
+            pv1_current=pv1_data[1] / 10.0,
+            pv1_power=pv1_data[2],
             pv2_voltage=pv2_data[0] / 10.0,
             pv2_current=pv2_data[1] / 10.0,
             pv2_power=pv2_data[2]
