@@ -4,8 +4,8 @@ import time
 def discover_device():
     # List of known discovery messages
     discovery_messages = [
-        "WIFIKIT-214028-READ",
         "set>server=",  # This is the one used in the inverter.py
+        "WIFIKIT-214028-READ",
         "HF-A11ASSISTHREAD",
         "AT+SEARCH=HF-LPB100"
     ]
