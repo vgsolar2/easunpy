@@ -30,6 +30,35 @@ class AsyncISolar:
             logger.error(f"Error reading registers {start_register}-{start_register + count - 1}: {str(e)}")
             return []
 
+    async def _read_registers_bulk(self, register_groups: list[tuple[int, int]], data_format: str = "Int") -> list[list[int]]:
+        """Read multiple groups of registers in a single connection."""
+        try:
+            # Create requests for each register group
+            requests = [
+                create_request(0x0777, 0x0001, 0x01, 0x03, start, count)
+                for start, count in register_groups
+            ]
+            
+            logger.debug(f"Sending bulk request for register groups: {register_groups}")
+            responses = await self.client.send_bulk(requests)
+            
+            if not responses or len(responses) != len(register_groups):
+                logger.warning(f"Incomplete or no responses received for bulk request")
+                return []
+            
+            # Decode each response
+            decoded_groups = []
+            for response, (_, count) in zip(responses, register_groups):
+                decoded = decode_modbus_response(response, count, data_format)
+                logger.debug(f"Decoded values: {decoded}")
+                decoded_groups.append(decoded)
+                
+            return decoded_groups
+            
+        except Exception as e:
+            logger.error(f"Error reading register groups: {str(e)}")
+            return []
+
     async def get_battery_data(self) -> Optional[BatteryData]:
         """Get battery information (registers 277-281) asynchronously."""
         values = await self._read_registers(277, 5)
@@ -45,17 +74,20 @@ class AsyncISolar:
         )
 
     async def get_pv_data(self) -> Optional[PVData]:
-        """Get PV information (combines multiple register groups) asynchronously."""
-        pv_general = await self._read_registers(302, 4)
-        if not pv_general or len(pv_general) != 4:
+        """Get PV information using bulk register reading."""
+        register_groups = [
+            (302, 4),  # PV general
+            (351, 3),  # PV1 data
+            (389, 3),  # PV2 data
+        ]
+        
+        results = await self._read_registers_bulk(register_groups)
+        if not results or len(results) != 3:
             return None
-
-        pv1_data = await self._read_registers(351, 3)
-        if not pv1_data or len(pv1_data) != 3:
-            return None
-
-        pv2_data = await self._read_registers(389, 3)
-        if not pv2_data or len(pv2_data) != 3:
+            
+        pv_general, pv1_data, pv2_data = results
+        
+        if len(pv_general) != 4 or len(pv1_data) != 3 or len(pv2_data) != 3:
             return None
 
         return PVData(
