@@ -40,7 +40,6 @@ class AsyncModbusClient:
         )
 
         try:
-            # Wait for a response or timeout
             await asyncio.wait_for(protocol.response_received, timeout=1)
             return protocol.response_received.result()
         except asyncio.TimeoutError:
@@ -121,47 +120,6 @@ class AsyncModbusClient:
             writer.close()
             await writer.wait_closed()
 
-    async def send_bulk(self, hex_commands: list[str], retry_count: int = 5) -> list[str]:
-        """Send multiple Modbus TCP commands after a single UDP discovery."""
-        logger.info(f"Sending {len(hex_commands)} commands in bulk")
-        
-        for attempt in range(retry_count):
-            logger.debug(f"Attempt {attempt + 1} of {retry_count}")
-
-            if not await self.send_udp_discovery():
-                logger.info("UDP discovery failed")
-                await asyncio.sleep(0.2)
-                continue
-
-            try:
-                responses = []
-                response_future = asyncio.get_event_loop().create_future()
-                
-                # Create a server to listen for the device's connection
-                server = await asyncio.start_server(
-                    lambda r, w: self.handle_bulk_client(r, w, hex_commands, responses, response_future),
-                    self.local_ip, self.port
-                )
-
-                async with server:
-                    logger.debug("Waiting for client connection...")
-                    try:
-                        # Wait for all responses
-                        await asyncio.wait_for(response_future, timeout=10)
-                        if responses:  # If we got any responses, return them
-                            return responses
-                    except asyncio.TimeoutError:
-                        logger.error("Timeout waiting for client connection")
-                        continue
-
-            except Exception as e:
-                logger.error(f"Error: {str(e)}")
-                await asyncio.sleep(1)
-                continue
-
-        logger.info("All retry attempts failed")
-        return []
-
     async def handle_bulk_client(self, reader, writer, commands: list[str], responses: list, response_future):
         """Handle the client connection for bulk commands."""
         try:
@@ -190,7 +148,6 @@ class AsyncModbusClient:
                 responses.append(response_hex)
                 await asyncio.sleep(0.1)  # Small delay between commands
 
-            # Set the future only after all commands are processed successfully
             if len(responses) == len(commands):
                 response_future.set_result(True)
             else:
@@ -203,4 +160,43 @@ class AsyncModbusClient:
                 response_future.set_result(False)
         finally:
             writer.close()
-            await writer.wait_closed() 
+            await writer.wait_closed()
+
+    async def send_bulk(self, hex_commands: list[str], retry_count: int = 5) -> list[str]:
+        """Send multiple Modbus TCP commands after a single UDP discovery."""
+        logger.info(f"Sending {len(hex_commands)} commands in bulk")
+        
+        for attempt in range(retry_count):
+            logger.debug(f"Attempt {attempt + 1} of {retry_count}")
+
+            if not await self.send_udp_discovery():
+                logger.info("UDP discovery failed")
+                await asyncio.sleep(0.2)
+                continue
+
+            try:
+                responses = []
+                response_future = asyncio.get_event_loop().create_future()
+                
+                server = await asyncio.start_server(
+                    lambda r, w: self.handle_bulk_client(r, w, hex_commands, responses, response_future),
+                    self.local_ip, self.port
+                )
+
+                async with server:
+                    logger.debug("Waiting for client connection...")
+                    try:
+                        await asyncio.wait_for(response_future, timeout=10)
+                        if responses:  # If we got any responses, return them
+                            return responses
+                    except asyncio.TimeoutError:
+                        logger.error("Timeout waiting for client connection")
+                        continue
+
+            except Exception as e:
+                logger.error(f"Error: {str(e)}")
+                await asyncio.sleep(1)
+                continue
+
+        logger.info("All retry attempts failed")
+        return [] 

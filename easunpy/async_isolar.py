@@ -11,25 +11,6 @@ class AsyncISolar:
     def __init__(self, inverter_ip: str, local_ip: str):
         self.client = AsyncModbusClient(inverter_ip=inverter_ip, local_ip=local_ip)
 
-    async def _read_registers(self, start_register: int, count: int, data_format: str = "Int") -> List[int]:
-        """Read a sequence of registers asynchronously."""
-        try:
-            request = create_request(0x0777, 0x0001, 0x01, 0x03, start_register, count)
-            logger.debug(f"Sending request for registers {start_register}-{start_register + count - 1}: {request}")
-            
-            response = await self.client.send(request)
-            if not response:
-                logger.warning(f"No response received for registers {start_register}-{start_register + count - 1}")
-                return []
-            
-            logger.debug(f"Received response: {response}")
-            decoded = decode_modbus_response(response, count, data_format)
-            logger.debug(f"Decoded values: {decoded}")
-            return decoded
-        except Exception as e:
-            logger.error(f"Error reading registers {start_register}-{start_register + count - 1}: {str(e)}")
-            return []
-
     async def _read_registers_bulk(self, register_groups: list[tuple[int, int]], data_format: str = "Int") -> list[list[int]]:
         """Read multiple groups of registers in a single connection."""
         try:
@@ -59,107 +40,104 @@ class AsyncISolar:
             logger.error(f"Error reading register groups: {str(e)}")
             return []
 
-    async def get_battery_data(self) -> Optional[BatteryData]:
-        """Get battery information (registers 277-281) asynchronously."""
-        values = await self._read_registers(277, 5)
-        if not values or len(values) != 5:
-            return None
-        
-        return BatteryData(
-            voltage=values[0] / 10.0,
-            current=values[1] / 10.0,
-            power=values[2],
-            soc=values[3],
-            temperature=values[4]
-        )
-
-    async def get_pv_data(self) -> Optional[PVData]:
-        """Get PV information using bulk register reading."""
+    async def get_all_data(self) -> tuple[Optional[BatteryData], Optional[PVData], Optional[GridData], Optional[OutputData], Optional[SystemStatus]]:
+        """Get all inverter data in a single bulk request."""
         register_groups = [
-            (302, 4),  # PV general
-            (351, 3),  # PV1 data
-            (389, 3),  # PV2 data
+            # Battery data (277-281)
+            (277, 5),  # voltage, current, power, soc, temperature
+            
+            # PV data
+            (302, 4),  # PV general: total_power, charging_power, charging_current, temperature
+            (351, 3),  # PV1: voltage, current, power
+            (389, 3),  # PV2: voltage, current, power
+            
+            # Grid data
+            (338, 3),  # voltage, current, power
+            
+            # Output data
+            (346, 5),  # voltage, current, power, apparent_power, load_percentage
+            
+            # Frequency (used by both grid and output)
+            (607, 1),  # frequency
+            
+            # Operating mode - changed from 600 to 590 which is the correct register
+            (590, 1),  # system status
         ]
         
         results = await self._read_registers_bulk(register_groups)
-        if not results or len(results) != 3:
-            return None
+        if not results or len(results) != len(register_groups):
+            return None, None, None, None, None
             
-        pv_general, pv1_data, pv2_data = results
+        battery_data, pv_general, pv1_data, pv2_data, grid_data, output_data, freq, mode = results
         
-        if len(pv_general) != 4 or len(pv1_data) != 3 or len(pv2_data) != 3:
-            return None
-
-        return PVData(
-            total_power=pv_general[0],
-            charging_power=pv_general[1],
-            charging_current=pv_general[2] / 10.0,
-            temperature=pv_general[3],
-            pv1_voltage=pv1_data[0] / 10.0,
-            pv1_current=pv1_data[1] / 10.0,
-            pv1_power=pv1_data[2],
-            pv2_voltage=pv2_data[0] / 10.0,
-            pv2_current=pv2_data[1] / 10.0,
-            pv2_power=pv2_data[2]
-        )
-
-    async def get_grid_data(self) -> Optional[GridData]:
-        """Get grid information (registers 338, 340, 342) asynchronously."""
-        values = await self._read_registers(338, 3)
-        if not values or len(values) != 3:
-            return None
-        
-        freq = await self._read_registers(607, 1)
-        if not freq:
-            return None
-
-        return GridData(
-            voltage=values[0] / 10.0,
-            power=values[2],
-            frequency=freq[0]
-        )
-
-    async def get_output_data(self) -> Optional[OutputData]:
-        """Get output information (registers 346-350, 607) asynchronously."""
-        values = await self._read_registers(346, 5)
-        if not values or len(values) != 5:
-            return None
-        
-        freq = await self._read_registers(607, 1)
-        if not freq:
-            return None
-
-        return OutputData(
-            voltage=values[0] / 10.0,
-            current=values[1] / 10.0,
-            power=values[2],
-            apparent_power=values[3],
-            load_percentage=values[4],
-            frequency=freq[0]
-        )
-
-    async def get_operating_mode(self) -> Optional[SystemStatus]:
-        """Get system operating mode (register 600) asynchronously."""
-        values = await self._read_registers(600, 1)
-        if not values:
-            return None
-
-        try:
-            mode = OperatingMode(values[0])
-            return SystemStatus(
-                operating_mode=mode,
-                mode_name=mode.name
+        # Create BatteryData
+        battery = None
+        if len(battery_data) == 5:
+            battery = BatteryData(
+                voltage=battery_data[0] / 10.0,
+                current=battery_data[1] / 10.0,
+                power=battery_data[2],
+                soc=battery_data[3],
+                temperature=battery_data[4]
             )
-        except ValueError:
-            return SystemStatus(
-                operating_mode=OperatingMode.FAULT,
-                mode_name=f"UNKNOWN ({values[0]})"
-            ) 
+            
+        # Create PVData
+        pv = None
+        if len(pv_general) == 4 and len(pv1_data) == 3 and len(pv2_data) == 3:
+            pv = PVData(
+                total_power=pv_general[0],
+                charging_power=pv_general[1],
+                charging_current=pv_general[2] / 10.0,
+                temperature=pv_general[3],
+                pv1_voltage=pv1_data[0] / 10.0,
+                pv1_current=pv1_data[1] / 10.0,
+                pv1_power=pv1_data[2],
+                pv2_voltage=pv2_data[0] / 10.0,
+                pv2_current=pv2_data[1] / 10.0,
+                pv2_power=pv2_data[2]
+            )
+            
+        # Create GridData
+        grid = None
+        if len(grid_data) == 3 and len(freq) == 1:
+            grid = GridData(
+                voltage=grid_data[0] / 10.0,
+                power=grid_data[2],
+                frequency=freq[0]
+            )
+            
+        # Create OutputData
+        output = None
+        if len(output_data) == 5 and len(freq) == 1:
+            output = OutputData(
+                voltage=output_data[0] / 10.0,
+                current=output_data[1] / 10.0,
+                power=output_data[2],
+                apparent_power=output_data[3],
+                load_percentage=output_data[4],
+                frequency=freq[0]
+            )
 
-    async def is_connected(self) -> bool:
-        """Check if the inverter is connected by attempting to retrieve the serial number asynchronously."""
-        try:
-            # Implement a method to check connection status
-            return True
-        except Exception:
-            return False 
+        # Create SystemStatus - improved error handling
+        status = None
+        if len(mode) == 1:
+            try:
+                mode_value = mode[0]
+                logger.debug(f"Raw mode value: {mode_value}")
+                try:
+                    op_mode = OperatingMode(mode_value)
+                    status = SystemStatus(
+                        operating_mode=op_mode,
+                        mode_name=op_mode.name
+                    )
+                except ValueError:
+                    logger.warning(f"Unknown operating mode value: {mode_value}")
+                    status = SystemStatus(
+                        operating_mode=OperatingMode.FAULT,
+                        mode_name=f"UNKNOWN ({mode_value})"
+                    )
+            except Exception as e:
+                logger.error(f"Error processing system status: {e}")
+                status = None
+            
+        return battery, pv, grid, output, status 

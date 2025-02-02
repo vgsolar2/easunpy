@@ -166,11 +166,11 @@ async def main():
 
     parser = argparse.ArgumentParser(description='Monitor Easun ISolar Inverter')
     parser.add_argument('--inverter-ip', type=str, help='Inverter IP address')
-    parser.add_argument('--interval', type=int, default=5, help='Update interval in seconds')
+    parser.add_argument('--interval', type=int, default=15, help='Update interval in seconds')
     parser.add_argument('--live', action='store_true', help='Live mode - update continuously')
     
     args = parser.parse_args()
-    
+
     local_ip = get_local_ip()
     if not local_ip:
         print("Error: Could not determine local IP address")
@@ -199,26 +199,18 @@ async def main():
             inverter_data = InverterData()
             
             while True:
-                layout = create_dashboard(inverter_data, "Updating system data...")
+                layout = create_dashboard(inverter_data, "Updating all system data...")
                 live.update(layout)
                 
-                inverter_data.system = await inverter.get_operating_mode()
+                # Use the bulk read method to get all data at once
+                battery, pv, grid, output, status = await inverter.get_all_data()
                 
-                layout = create_dashboard(inverter_data, "Updating battery data...")
-                live.update(layout)
-                inverter_data.battery = await inverter.get_battery_data()
-                
-                layout = create_dashboard(inverter_data, "Updating grid data...")
-                live.update(layout)
-                inverter_data.grid = await inverter.get_grid_data()
-                
-                layout = create_dashboard(inverter_data, "Updating output data...")
-                live.update(layout)
-                inverter_data.output = await inverter.get_output_data()
-                
-                layout = create_dashboard(inverter_data, "Updating PV data...")
-                live.update(layout)
-                inverter_data.pv = await inverter.get_pv_data()
+                # Update the inverter data object
+                inverter_data.battery = battery
+                inverter_data.pv = pv
+                inverter_data.grid = grid
+                inverter_data.output = output
+                inverter_data.system = status
                 
                 layout = create_dashboard(inverter_data, "Update done")
                 live.update(layout)
