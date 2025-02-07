@@ -31,19 +31,21 @@ class DataCollector:
     def __init__(self, isolar):
         self._isolar = isolar
         self._data = {}
-        self._lock = asyncio.Lock()  # Initialize the lock
+        self._lock = asyncio.Lock()
 
     async def update_data(self):
-        """Fetch all data from the inverter asynchronously."""
-        async with self._lock:  # Use the lock to ensure only one request at a time
+        """Fetch all data from the inverter asynchronously using bulk request."""
+        async with self._lock:
             try:
-                self._data['battery'] = await self._isolar.get_battery_data()
-                self._data['pv'] = await self._isolar.get_pv_data()
-                self._data['grid'] = await self._isolar.get_grid_data()
-                self._data['output'] = await self._isolar.get_output_data()
-                _LOGGER.debug("DataCollector updated all data")
+                battery, pv, grid, output, status = await self._isolar.get_all_data()
+                self._data['battery'] = battery
+                self._data['pv'] = pv
+                self._data['grid'] = grid
+                self._data['output'] = output
+                self._data['system'] = status
+                _LOGGER.debug("DataCollector updated all data in bulk")
             except Exception as e:
-                _LOGGER.error(f"Error updating data: {str(e)}")
+                _LOGGER.error(f"Error updating data in bulk: {str(e)}")
 
     def get_data(self, data_type):
         """Get data for a specific type."""
@@ -112,6 +114,7 @@ async def async_setup_entry(
         EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfPower.WATT, "output", "apparent_power"),
         EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage"),
         EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency"),
+        EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name"),
     ]
     
     add_entities(entities, True)
