@@ -23,7 +23,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from easunpy.async_isolar import AsyncISolar
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(seconds=60)
+SCAN_INTERVAL = timedelta(seconds=2)
 
 class DataCollector:
     """Centralized data collector for Easun Inverter."""
@@ -114,7 +114,7 @@ async def async_setup_entry(
         EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfPower.WATT, "output", "apparent_power"),
         EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage"),
         EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency"),
-        EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name"),
+        # EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name"),
     ]
     
     add_entities(entities, True)
