@@ -1,175 +1,37 @@
-views:
-  - title: Energy
-    path: energy
-    icon: mdi:lightning-bolt
-    type: sections
-    sections:
-      - type: grid
-        cards:
-          - type: energy-distribution
-            action: default
-          - type: glance
-            entities:
-              - entity: sensor.import_energy_today
-                name: Imported Energy
-              - entity: sensor.export_energy_today
-                name: Exported Energy
-            layout_options:
-              grid_columns: 2
-              grid_rows: 2
-          - type: entity
-            entity: sensor.givtcp_ch2414g018_pv_energy_today_kwh
-            name: Solar Generated
-            icon: mdi:solar-power-variant
-          - type: entities
-            entities:
-              - entity: >-
-                  sensor.octopus_energy_electricity_23j0020498_1200033991828_current_accumulative_cost
-                name: Electricity
-                secondary_info: none
-              - entity: >-
-                  sensor.octopus_energy_gas_e6s10867402361_3252130407_current_accumulative_cost
-                name: Gas
-                secondary_info: none
-            layout_options:
-              grid_columns: 2
-              grid_rows: 2
-            show_header_toggle: false
-          - type: tile
-            entity: sensor.givtcp_ch2414g018_battery_charge_energy_today_kwh
-            name: Battery Charged
-            icon: mdi:battery-plus-variant
-          - type: tile
-            entity: sensor.givtcp_ch2414g018_battery_discharge_energy_today_kwh
-            name: Battery Discharged
-            icon: mdi:battery-minus-variant
-          - type: markdown
-            content: >
-              ### Solar Forecast <font color='#F5C344'><ha-icon
-              icon='mdi:window-open-variant'/></font>
-
-
-              {{ (states('sensor.energy_production_today_2')|float +
-              states('sensor.energy_production_today_2')|float)|round(2)  }} kWh
-            layout_options:
-              grid_columns: 2
-              grid_rows: 2
-        title: Energy Today
-        column_span: 1
-      - type: grid
-        cards:
-          - graph: line
-            type: sensor
-            entity: sensor.givtcp_ch2414g018_load_power
-            detail: 2
-            name: Home Demand
-            layout_options:
-              grid_columns: full
-            icon: mdi:home
-          - graph: line
-            type: sensor
-            entity: sensor.givtcp_ch2414g018_import_power
-            detail: 2
-            name: Grid Import
-            icon: mdi:transmission-tower
-          - graph: line
-            type: sensor
-            entity: sensor.givtcp_ch2414g018_export_power
-            detail: 2
-            name: Grid Export
-            icon: mdi:transmission-tower
-          - graph: line
-            type: sensor
-            entity: sensor.givtcp_ch2414g018_pv_power
-            detail: 2
-            name: Solar Power
-            icon: mdi:solar-power-variant
-          - graph: line
-            type: sensor
-            entity: sensor.givtcp_ch2414g018_battery_power
-            detail: 2
-            layout_options:
-              grid_columns: 2
-              grid_rows: 2
-            name: Battery AC Inverter
-          - type: markdown
-            content: >2-
-               <center> 
-                {%- from 'handy_time.jinja' import smart_time -%}
-                
-                {% if states('sensor.givtcp_ch2414g018_charge_power') | float > 0 %}
-                
-                # Battery charged {{ smart_time(states('sensor.givtcp_ch2414g018_charge_completion_time')) }}
-                
-                {% elif states('sensor.givtcp_ch2414g018_discharge_power') | float > 0 %} 
-                
-              # Battery emptying {{
-              smart_time(states('sensor.givtcp_ch2414g018_discharge_completion_time'))
-              }} 
-
-                {% else %}
-
-                # Battery idle
-                
-                {% endif %}
-
-
-                
-              </center> 
-          - type: custom:state-switch
-            entity: select.givtcp_ch2414g018_force_export
-            default: Default
-            states:
-              Default:
-                type: markdown
-                content: '**Disabled: Discharging**'
-                layout_options:
-                  grid_columns: 2
-                  grid_rows: 2
-                title: Force Charge
-              Normal:
-                type: tile
-                entity: select.givtcp_ch2414g018_force_charge
-                name: Force Charge
-                icon: mdi:battery-arrow-up
-                hide_state: true
-                features:
-                  - type: select-options
-            layout_options:
-              grid_columns: 2
-              grid_rows: 2
-          - type: custom:state-switch
-            entity: select.givtcp_ch2414g018_force_charge
-            default: Default
-            states:
-              Default:
-                type: markdown
-                content: '**Disabled: Charging**'
-                layout_options:
-                  grid_columns: 2
-                  grid_rows: 2
-                title: Force Discharge
-              Normal:
-                type: tile
-                entity: select.givtcp_ch2414g018_force_export
-                name: Force Discharge
-                icon: mdi:battery-arrow-down
-                hide_state: true
-                features:
-                  - type: select-options
-            layout_options:
-              grid_columns: 2
-              grid_rows: 2
-        title: Current Power
-        column_span: 1
-    badges:
-      - type: entity
-        show_name: false
-        show_state: true
-        show_icon: true
-        entity: sensor.givtcp_ch2414g018_soc
-        name: Battery SOC
-        state_content:
-          - name
-          - state
-  - title: Home
+type: custom:vertical-stack-in-card
+cards:
+  - type: horizontal-stack
+    cards:
+      - type: custom:power-flow-card-plus
+        entities:
+          grid:
+            entity:
+              consumption: sensor.easun_grid_power
+            display_state: one_way
+            color_circle: true
+          solar:
+            entity: sensor.easun_pv_total_power
+          battery:
+            entity: sensor.easun_battery_power
+            state_of_charge: sensor.easun_battery_state_of_charge
+            display_state: one_way
+            color_circle: true
+            invert_state: true
+          home:
+            entity: sensor.easun_output_power
+          watt_threshold: 10000
+      - type: entities
+        title: Inverter Status
+        entities:
+          - entity: sensor.easun_battery_voltage
+            name: Easun Battery Voltage
+          - entity: sensor.easun_battery_current
+            name: Easun Battery Current
+          - entity: sensor.easun_battery_power
+            name: Easun Battery Power
+          - entity: sensor.easun_pv1_power
+            name: Easun PV1 Power
+          - entity: sensor.easun_grid_voltage
+            name: Easun Grid Voltage
+          - entity: sensor.easun_output_power
+            name: Easun Output Power
