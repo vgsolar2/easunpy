@@ -109,7 +109,7 @@ class DataCollector:
 class EasunSensor(SensorEntity):
     """Representation of an Easun Inverter sensor."""
 
-    def __init__(self, data_collector, id, name, unit, data_type, data_attr):
+    def __init__(self, data_collector, id, name, unit, data_type, data_attr, value_converter=None):
         """Initialize the sensor."""
         self._data_collector = data_collector
         self._id = id
@@ -118,12 +118,16 @@ class EasunSensor(SensorEntity):
         self._data_type = data_type
         self._data_attr = data_attr
         self._state = None
+        self._value_converter = value_converter
 
     def update(self) -> None:
         """Fetch new state data for the sensor."""
         data = self._data_collector.get_data(self._data_type)
         if data:
-            self._state = getattr(data, self._data_attr)
+            value = getattr(data, self._data_attr)
+            if self._value_converter is not None:
+                value = self._value_converter(value)
+            self._state = value
             _LOGGER.debug(f"Sensor {self._name} updated with state: {self._state}")
         else:
             _LOGGER.error(f"Failed to get {self._data_type} data")
@@ -203,6 +207,10 @@ async def async_setup_entry(
         """Filter to only include negative power values (discharging)."""
         return abs(power) if power < 0 else 0
 
+    def frequency_converter(value):
+        """Convert frequency from centihz to hz."""
+        return value / 100 if value is not None else None
+
     entities = [
         EasunSensor(data_collector, "battery_voltage", "Battery Voltage", UnitOfElectricPotential.VOLT, "battery", "voltage"),
         EasunSensor(data_collector, "battery_current", "Battery Current", UnitOfElectricCurrent.AMPERE, "battery", "current"),
@@ -220,28 +228,28 @@ async def async_setup_entry(
         EasunSensor(data_collector, "pv2_power", "PV2 Power", UnitOfPower.WATT, "pv", "pv2_power"),
         EasunSensor(data_collector, "grid_voltage", "Grid Voltage", UnitOfElectricPotential.VOLT, "grid", "voltage"),
         EasunSensor(data_collector, "grid_power", "Grid Power", UnitOfPower.WATT, "grid", "power"),
-        EasunSensor(data_collector, "grid_frequency", "Grid Frequency", UnitOfFrequency.HERTZ, "grid", "frequency"),
+        EasunSensor(data_collector, "grid_frequency", "Grid Frequency", UnitOfFrequency.HERTZ, "grid", "frequency", frequency_converter),
         EasunSensor(data_collector, "output_voltage", "Output Voltage", UnitOfElectricPotential.VOLT, "output", "voltage"),
         EasunSensor(data_collector, "output_current", "Output Current", UnitOfElectricCurrent.AMPERE, "output", "current"),
         EasunSensor(data_collector, "output_power", "Output Power", UnitOfPower.WATT, "output", "power"),
         EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfPower.WATT, "output", "apparent_power"),
         EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage"),
-        EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency"),
+        EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency", frequency_converter),
         # EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name"),
     ]
     
     # Add accumulators for daily energy tracking
     accumulator_sensors = [
         AccumulatorSensor(data_collector, "pv_energy_accumulator", "PV Energy Accumulator", 
-                         UnitOfEnergy.KILO_WATT_HOUR, "pv", "total_power"),
+                         UnitOfPower.KILO_WATT, "pv", "total_power"),
         AccumulatorSensor(data_collector, "battery_charge_energy_accumulator", 
-                         "Battery Charge Energy Accumulator", UnitOfEnergy.KILO_WATT_HOUR, 
+                         "Battery Charge Energy Accumulator", UnitOfPower.KILO_WATT, 
                          "battery", "power", charging_only),
         AccumulatorSensor(data_collector, "battery_discharge_energy_accumulator", 
-                         "Battery Discharge Energy Accumulator", UnitOfEnergy.KILO_WATT_HOUR, 
+                         "Battery Discharge Energy Accumulator", UnitOfPower.KILO_WATT, 
                          "battery", "power", discharging_only),
         AccumulatorSensor(data_collector, "grid_energy_accumulator", "Grid Energy Accumulator", 
-                         UnitOfEnergy.KILO_WATT_HOUR, "grid", "power"),
+                         UnitOfPower.KILO_WATT, "grid", "power"),
     ]
     
     entities.extend(accumulator_sensors)    
