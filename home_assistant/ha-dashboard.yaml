@@ -1,6 +1,8 @@
+icon: mdi:transmission-tower
+theme: dark-mode
 type: custom:vertical-stack-in-card
 cards:
-  - type: horizontal-stack
+  - type: vertical-stack
     cards:
       - type: custom:power-flow-card-plus
         entities:
@@ -19,96 +21,127 @@ cards:
             invert_state: true
           home:
             entity: sensor.easun_output_power
+            override_state: true
           watt_threshold: 10000
-      - type: vertical-stack
+      - type: custom:layout-card
+        layout_type: custom:Horizontal-layout
+        layout:
+          width: 90
+          max_cols: 4
         cards:
-          - type: horizontal-stack
-            cards:
-              - type: custom:button-card
-                entity: sensor.easun_grid_energy_accumulator
-                name: Total Grid Energy
-                icon: mdi:transmission-tower
-                show_state: true
-                size: 40%
-                styles:
-                  card:
-                    - height: 150px
-                    - width: 150px
-              - type: custom:button-card
-                entity: sensor.easun_pv_energy_accumulator
-                name: Total Solar Energy
-                icon: mdi:solar-power
-                show_state: true
-                size: 40%
-                styles:
-                  card:
-                    - height: 150px
-                    - width: 150px
-          - type: horizontal-stack
-            cards:
-              - type: custom:button-card
-                entity: sensor.easun_battery_charge_energy_accumulator
-                name: Total Battery Charge
-                icon: mdi:battery-charging
-                show_state: true
-                size: 40%
-                styles:
-                  card:
-                    - height: 150px
-                    - width: 150px
-              - type: custom:button-card
-                entity: sensor.easun_battery_discharge_energy_accumulator
-                name: Total Battery Discharge
-                icon: mdi:battery-empty
-                show_state: true
-                size: 40%
-                styles:
-                  card:
-                    - height: 150px
-                    - width: 150px
-  - type: custom:apexcharts-card
-    header:
-      title: Daily Power Data
-    apex_config:
-      tooltip:
-        enabled: false
-      chart:
-        height: 300px
-      stroke:
-        width: 2
-    series:
-      - entity: sensor.easun_grid_power
-        name: Grid Power
-        type: area
-        color: "#488FC2"
-        transform: return x / 1000;
-      - entity: sensor.easun_pv_total_power
-        name: Solar Power
-        type: area
-        color: "#FF9800"
-        transform: return x / 1000;
-      - entity: sensor.easun_battery_power
-        name: Battery Power
-        type: area
-        color: "#F06293"
-        transform: return x / 1000;
-      - entity: sensor.easun_output_power
-        name: Load Power
-        type: area
-        color: "#488FC2"
-        transform: return x / 1000;
-  - type: entities
-    title: Inverter Status
-    entities:
-      - entity: sensor.easun_battery_voltage
-        name: Easun Battery Voltage
-      - entity: sensor.easun_battery_current
-        name: Easun Battery Current
-      - entity: sensor.easun_battery_power
-        name: Easun Battery Power
-      - entity: sensor.easun_pv1_power
-        name: Easun PV1 Power
-      - entity: sensor.easun_grid_voltage
-        name: Easun Grid Voltage
-      - entity: sensor.easun_output_power
-        name: Easun Output Power
+          - type: custom:button-card
+            entity: sensor.easun_grid_energy_accumulator
+            name: Grid
+            icon: mdi:transmission-tower
+            show_state: true
+            size: 40%
+            styles:
+              card:
+                - height: 90px
+                - width: 90px
+                - display: flex
+                - flex-direction: column
+                - align-items: center
+                - justify-content: center
+                - text-align: center
+                - background: none
+                - box-shadow: none
+                - border: none
+              icon:
+                - color: "#1E90FF"
+                - width: 30px
+                - height: 30px
+              name:
+                - font-size: 14px
+                - text-align: center
+              state:
+                - font-size: 16px
+                - font-weight: bold
+                - text-align: center
+          - type: custom:button-card
+            entity: sensor.easun_pv_energy_accumulator
+            name: Solar
+            icon: mdi:solar-power
+            show_state: true
+            size: 40%
+            styles:
+              card:
+                - height: 90px
+                - width: 90px
+                - display: flex
+                - flex-direction: column
+                - align-items: center
+                - justify-content: center
+                - text-align: center
+                - background: none
+                - box-shadow: none
+                - border: none
+              icon:
+                - color: "#FFA500"
+                - width: 30px
+                - height: 30px
+              name:
+                - font-size: 14px
+                - text-align: center
+              state:
+                - font-size: 16px
+                - font-weight: bold
+                - text-align: center
+          - type: custom:button-card
+            entity: sensor.easun_battery_charge_energy_accumulator
+            name: Charged
+            icon: mdi:battery-charging
+            show_state: true
+            size: 40%
+            styles:
+              card:
+                - height: 90px
+                - width: 90px
+                - display: flex
+                - flex-direction: column
+                - align-items: center
+                - justify-content: center
+                - text-align: center
+                - background: none
+                - box-shadow: none
+                - border: none
+              icon:
+                - color: "#00FFCC"
+                - width: 30px
+                - height: 30px
+              name:
+                - font-size: 14px
+                - text-align: center
+              state:
+                - font-size: 16px
+                - font-weight: bold
+                - text-align: center
+          - type: custom:button-card
+            entity: sensor.easun_battery_discharge_energy_accumulator
+            name: Discharged
+            icon: mdi:battery-arrow-up-outline
+            show_state: true
+            size: 40%
+            styles:
+              card:
+                - height: 90px
+                - width: 90px
+                - display: flex
+                - flex-direction: column
+                - align-items: center
+                - justify-content: center
+                - text-align: center
+                - background: none
+                - box-shadow: none
+                - border: none
+              icon:
+                - color: "#00FFCC"
+                - width: 30px
+                - height: 30px
+              name:
+                - font-size: 14px
+                - text-align: center
+              state:
+                - font-size: 16px
+                - font-weight: bold
+                - text-align: center
