@@ -43,6 +43,7 @@ class AsyncISolar:
     async def get_all_data(self) -> tuple[Optional[BatteryData], Optional[PVData], Optional[GridData], Optional[OutputData], Optional[SystemStatus]]:
         """Get all inverter data in a single bulk request."""
         register_groups = [
+            # (184, 1),  # Mode
             # Battery data (277-281)
             (277, 5),  # voltage, current, power, soc, temperature
             
@@ -61,14 +62,17 @@ class AsyncISolar:
             (607, 1),  # frequency
             
             # Operating mode - changed from 600 to 590 which is the correct register
-            (590, 1),  # system status
+            (590, 2),  # system status
+            
+            (703, 2), # PV generated today and total.
+            
         ]
         
         results = await self._read_registers_bulk(register_groups)
         if not results or len(results) != len(register_groups):
             return None, None, None, None, None
             
-        battery_data, pv_general, pv1_data, pv2_data, grid_data, output_data, freq, mode = results
+        battery_data, pv_general, pv1_data, pv2_data, grid_data, output_data, freq, mode, pv_generated_acc = results
         
         # Create BatteryData
         battery = None
@@ -94,9 +98,11 @@ class AsyncISolar:
                 pv1_power=pv1_data[2],
                 pv2_voltage=pv2_data[0] / 10.0,
                 pv2_current=pv2_data[1] / 10.0,
-                pv2_power=pv2_data[2]
+                pv2_power=pv2_data[2],
+                pv_generated_today=pv_generated_acc[0] / 100.0,
+                pv_generated_total=pv_generated_acc[1] / 100.0
             )
-            
+        
         # Create GridData
         grid = None
         if len(grid_data) == 3 and len(freq) == 1:
@@ -139,5 +145,5 @@ class AsyncISolar:
             except Exception as e:
                 logger.error(f"Error processing system status: {e}")
                 status = None
-            
+        
         return battery, pv, grid, output, status 

@@ -30,7 +30,7 @@ cards:
           max_cols: 4
         cards:
           - type: custom:button-card
-            entity: sensor.easun_grid_energy_accumulator
+            entity: sensor.easun_grid_energy_daily
             name: Grid
             icon: mdi:transmission-tower
             show_state: true
@@ -59,7 +59,7 @@ cards:
                 - font-weight: bold
                 - text-align: center
           - type: custom:button-card
-            entity: sensor.easun_pv_energy_accumulator
+            entity: sensor.easun_pv_generated_today
             name: Solar
             icon: mdi:solar-power
             show_state: true
@@ -88,7 +88,11 @@ cards:
                 - font-weight: bold
                 - text-align: center
           - type: custom:button-card
-            entity: sensor.easun_battery_charge_energy_accumulator
+            entity: sensor.easun_battery_charge_daily
+            state_display: |
+              [[[
+                return (entity.state / 1000).toFixed(2) + " kW";
+              ]]]
             name: Charged
             icon: mdi:battery-charging
             show_state: true
@@ -117,7 +121,11 @@ cards:
                 - font-weight: bold
                 - text-align: center
           - type: custom:button-card
-            entity: sensor.easun_battery_discharge_energy_accumulator
+            entity: sensor.easun_battery_discharge_daily
+            state_display: |
+              [[[
+                return (entity.state / 1000).toFixed(2) + " kW";
+              ]]]
             name: Discharged
             icon: mdi:battery-arrow-up-outline
             show_state: true

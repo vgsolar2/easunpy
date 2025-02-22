@@ -10,6 +10,7 @@ from homeassistant.const import (
     UnitOfElectricPotential,
     UnitOfTemperature,
     UnitOfFrequency,
+    UnitOfApparentPower,
     UnitOfEnergy,
     PERCENTAGE,
 )
@@ -22,63 +23,6 @@ from easunpy.async_isolar import AsyncISolar
 
 _LOGGER = logging.getLogger(__name__)
 
-class AccumulatorSensor(SensorEntity):
-    """Represents an accumulating energy sensor that integrates power over time."""
-
-    def __init__(self, data_collector, id, name, unit, data_type, data_attr, power_filter=None):
-        """Initialize the accumulator sensor."""
-        self._data_collector = data_collector
-        self._id = id
-        self._name = name
-        self._unit = unit
-        self._state = 0.0  # Total energy accumulated in kWh
-        self._data_type = data_type
-        self._data_attr = data_attr
-        self._last_update = datetime.now()
-        self._power_filter = power_filter  # Function to filter power values
-
-    async def async_update(self) -> None:
-        """Integrate power over time to compute accumulated energy (kWh)."""
-        now = datetime.now()
-        elapsed_hours = (now - self._last_update).total_seconds() / 3600
-        self._last_update = now
-
-        data = self._data_collector.get_data(self._data_type)
-        if data:
-            power = getattr(data, self._data_attr)
-            _LOGGER.error(f"{self._name} from {self._data_type}.{self._data_attr} is {power}W")
-            
-            # Apply power filter if one is set
-            if self._power_filter is not None:
-                power = self._power_filter(power)
-            
-            self._state += (power * elapsed_hours) / 1000  # Convert W to kWh
-            _LOGGER.error(f"{self._name}: Accumulated {self._state} kWh from {power}W")
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return f"Easun {self._name}"
-
-    @property
-    def unique_id(self):
-        """Return a unique ID."""
-        return f"easun_inverter_{self._id}"
-
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        return round(self._state, 3)  # Keep 3 decimal places
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return self._unit
-
-    def reset(self):
-        """Reset the accumulator at midnight."""
-        _LOGGER.info(f"Resetting {self._name} accumulator to 0 kWh")
-        self._state = 0.0
 
 class DataCollector:
     """Centralized data collector for Easun Inverter."""
@@ -87,20 +31,57 @@ class DataCollector:
         self._isolar = isolar
         self._data = {}
         self._lock = asyncio.Lock()
+        self._consecutive_failures = 0
+        self._max_consecutive_failures = 5
+        self._last_update_start = None
+        self._update_timeout = 30  # 30 seconds timeout for updates
 
     async def update_data(self):
         """Fetch all data from the inverter asynchronously using bulk request."""
-        async with self._lock:
+        if not await self._lock.acquire():
+            _LOGGER.warning("Could not acquire lock for update")
+            return
+
+        try:
+            # Create a task for the actual data collection
+            update_task = asyncio.create_task(self._do_update())
+            
+            # Wait for the task with timeout
             try:
-                battery, pv, grid, output, status = await self._isolar.get_all_data()
-                self._data['battery'] = battery
-                self._data['pv'] = pv
-                self._data['grid'] = grid
-                self._data['output'] = output
-                self._data['system'] = status
-                _LOGGER.debug("DataCollector updated all data in bulk")
-            except Exception as e:
-                _LOGGER.error(f"Error updating data in bulk: {str(e)}")
+                await asyncio.wait_for(update_task, timeout=self._update_timeout)
+            except asyncio.TimeoutError:
+                _LOGGER.error("Update timed out, cancelling task")
+                update_task.cancel()
+                try:
+                    await update_task
+                except asyncio.CancelledError:
+                    _LOGGER.debug("Update task cancelled successfully")
+                raise Exception("Update timed out")
+            
+        finally:
+            self._lock.release()
+
+    async def _do_update(self):
+        """Actual update implementation."""
+        try:
+            battery, pv, grid, output, status = await self._isolar.get_all_data()
+            if all(x is None for x in (battery, pv, grid, output, status)):
+                raise Exception("No data received from inverter")
+            
+            self._data['battery'] = battery
+            self._data['pv'] = pv
+            self._data['grid'] = grid
+            self._data['output'] = output
+            self._data['system'] = status
+            self._consecutive_failures = 0  # Reset failure counter on success
+            _LOGGER.debug("DataCollector updated all data in bulk")
+        except Exception as e:
+            self._consecutive_failures += 1
+            delay = min(300, 2 ** self._consecutive_failures)  # Exponential backoff, max 5 minutes
+            _LOGGER.error(f"Error updating data in bulk (attempt {self._consecutive_failures}): {str(e)}")
+            _LOGGER.warning(f"Will retry with increased delay of {delay} seconds")
+            await asyncio.sleep(delay)
+            raise
 
     def get_data(self, data_type):
         """Get data for a specific type."""
@@ -119,18 +100,36 @@ class EasunSensor(SensorEntity):
         self._data_attr = data_attr
         self._state = None
         self._value_converter = value_converter
+        self._available = True  # Add availability tracking
 
     def update(self) -> None:
         """Fetch new state data for the sensor."""
-        data = self._data_collector.get_data(self._data_type)
-        if data:
-            value = getattr(data, self._data_attr)
-            if self._value_converter is not None:
-                value = self._value_converter(value)
-            self._state = value
-            _LOGGER.debug(f"Sensor {self._name} updated with state: {self._state}")
-        else:
-            _LOGGER.error(f"Failed to get {self._data_type} data")
+        try:
+            data = self._data_collector.get_data(self._data_type)
+            if data:
+                value = getattr(data, self._data_attr)
+                if self._value_converter is not None:
+                    value = self._value_converter(value)
+                self._state = value
+                self._available = True  # Mark as available on successful update
+                _LOGGER.debug(f"Sensor {self._name} updated with state: {self._state}")
+            else:
+                _LOGGER.warning(f"No {self._data_type} data available")
+                self._available = False  # Mark as unavailable when no data
+        except Exception as e:
+            _LOGGER.error(f"Error updating sensor {self._name}: {str(e)}")
+            self._available = False  # Mark as unavailable on error
+            # Don't raise the exception - let the sensor continue trying
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self._available
+
+    @property
+    def should_poll(self) -> bool:
+        """Return True as entity should be polled."""
+        return True
 
     @property
     def name(self):
@@ -181,16 +180,32 @@ async def async_setup_entry(
     async def update_data_collector(now):
         """Update data collector."""
         nonlocal is_updating
+        
         if is_updating:
-            _LOGGER.debug("Update already in progress, skipping this cycle")
-            return
+            if await data_collector.is_update_stuck():
+                _LOGGER.warning("Previous update appears to be stuck, forcing a new update")
+                is_updating = False
+            else:
+                _LOGGER.debug("Update already in progress, skipping this cycle")
+                return
 
         _LOGGER.debug("Starting data collector update")
         is_updating = True
+        data_collector._last_update_start = datetime.now()
+        
         try:
-            await data_collector.update_data()
+            # Use wait_for here as well for extra safety
+            await asyncio.wait_for(
+                data_collector.update_data(),
+                timeout=data_collector._update_timeout + 5  # Add a small buffer
+            )
+        except asyncio.TimeoutError:
+            _LOGGER.error("Update operation timed out at scheduler level")
+        except Exception as e:
+            _LOGGER.error(f"Error updating data collector: {str(e)}")
         finally:
             is_updating = False
+            data_collector._last_update_start = None
             _LOGGER.debug("Data collector update finished")
 
     async_track_time_interval(
@@ -198,14 +213,6 @@ async def async_setup_entry(
         update_data_collector, 
         timedelta(seconds=scan_interval)
     )
-
-    def charging_only(power):
-        """Filter to only include positive power values (charging)."""
-        return power if power > 0 else 0
-
-    def discharging_only(power):
-        """Filter to only include negative power values (discharging)."""
-        return abs(power) if power < 0 else 0
 
     def frequency_converter(value):
         """Convert frequency from centihz to hz."""
@@ -226,43 +233,20 @@ async def async_setup_entry(
         EasunSensor(data_collector, "pv2_voltage", "PV2 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv2_voltage"),
         EasunSensor(data_collector, "pv2_current", "PV2 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv2_current"),
         EasunSensor(data_collector, "pv2_power", "PV2 Power", UnitOfPower.WATT, "pv", "pv2_power"),
+        EasunSensor(data_collector, "pv_generated_today", "PV Generated Today", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_today"),
+        EasunSensor(data_collector, "pv_generated_total", "PV Generated Total", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_total"),
         EasunSensor(data_collector, "grid_voltage", "Grid Voltage", UnitOfElectricPotential.VOLT, "grid", "voltage"),
         EasunSensor(data_collector, "grid_power", "Grid Power", UnitOfPower.WATT, "grid", "power"),
         EasunSensor(data_collector, "grid_frequency", "Grid Frequency", UnitOfFrequency.HERTZ, "grid", "frequency", frequency_converter),
         EasunSensor(data_collector, "output_voltage", "Output Voltage", UnitOfElectricPotential.VOLT, "output", "voltage"),
         EasunSensor(data_collector, "output_current", "Output Current", UnitOfElectricCurrent.AMPERE, "output", "current"),
         EasunSensor(data_collector, "output_power", "Output Power", UnitOfPower.WATT, "output", "power"),
-        EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfPower.WATT, "output", "apparent_power"),
+        EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfApparentPower.VOLT_AMPERE, "output", "apparent_power"),
         EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage"),
         EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency", frequency_converter),
         # EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name"),
     ]
     
-    # Add accumulators for daily energy tracking
-    accumulator_sensors = [
-        AccumulatorSensor(data_collector, "pv_energy_accumulator", "PV Energy Accumulator", 
-                         UnitOfPower.KILO_WATT, "pv", "total_power"),
-        AccumulatorSensor(data_collector, "battery_charge_energy_accumulator", 
-                         "Battery Charge Energy Accumulator", UnitOfPower.KILO_WATT, 
-                         "battery", "power", charging_only),
-        AccumulatorSensor(data_collector, "battery_discharge_energy_accumulator", 
-                         "Battery Discharge Energy Accumulator", UnitOfPower.KILO_WATT, 
-                         "battery", "power", discharging_only),
-        AccumulatorSensor(data_collector, "grid_energy_accumulator", "Grid Energy Accumulator", 
-                         UnitOfPower.KILO_WATT, "grid", "power"),
-    ]
-    
-    entities.extend(accumulator_sensors)    
     add_entities(entities, True)
     
-    # Schedule daily reset at midnight
-    async def reset_accumulators(now):
-        """Reset all accumulator sensors at midnight."""
-        for sensor in accumulator_sensors:
-            sensor.reset()
-
-    midnight = datetime.combine(datetime.today() + timedelta(days=1), datetime.min.time())
-    time_until_midnight = (midnight - datetime.now()).total_seconds()
-
-    async_track_time_interval(hass, reset_accumulators, timedelta(seconds=time_until_midnight))
     _LOGGER.debug("Easun Inverter sensors added")

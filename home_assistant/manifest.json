@@ -6,7 +6,7 @@
   "codeowners": [],
   "requirements": [
     "dataclasses>=0.6",
-    "easunpy>=0.1.11"
+    "easunpy>=0.1.20"
   ],
   "version": "1.0.0",
   "iot_class": "local_polling",

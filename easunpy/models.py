@@ -21,6 +21,8 @@ class PVData:
     pv2_voltage: float
     pv2_current: int
     pv2_power: int
+    pv_generated_today: int
+    pv_generated_total: int
 
 @dataclass
 class GridData:
