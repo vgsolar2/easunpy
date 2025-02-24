@@ -34,6 +34,7 @@ class DataCollector:
         self._consecutive_failures = 0
         self._max_consecutive_failures = 5
         self._last_update_start = None
+        self._last_successful_update = None  # Add timestamp for successful updates
         self._update_timeout = 30  # 30 seconds timeout for updates
 
     async def is_update_stuck(self) -> bool:
@@ -81,7 +82,8 @@ class DataCollector:
             self._data['grid'] = grid
             self._data['output'] = output
             self._data['system'] = status
-            self._consecutive_failures = 0  # Reset failure counter on success
+            self._consecutive_failures = 0
+            self._last_successful_update = datetime.now()  # Update timestamp on success
             _LOGGER.debug("DataCollector updated all data in bulk")
         except Exception as e:
             self._consecutive_failures += 1
@@ -94,6 +96,11 @@ class DataCollector:
     def get_data(self, data_type):
         """Get data for a specific type."""
         return self._data.get(data_type)
+
+    @property
+    def last_update(self):
+        """Get the timestamp of the last successful update."""
+        return self._last_successful_update
 
 class EasunSensor(SensorEntity):
     """Representation of an Easun Inverter sensor."""
@@ -108,7 +115,8 @@ class EasunSensor(SensorEntity):
         self._data_attr = data_attr
         self._state = None
         self._value_converter = value_converter
-        self._available = True  # Add availability tracking
+        self._available = True
+        self._force_update = True  # Force update even if value hasn't changed
 
     def update(self) -> None:
         """Fetch new state data for the sensor."""
@@ -119,15 +127,31 @@ class EasunSensor(SensorEntity):
                 if self._value_converter is not None:
                     value = self._value_converter(value)
                 self._state = value
-                self._available = True  # Mark as available on successful update
+                self._available = True
                 _LOGGER.debug(f"Sensor {self._name} updated with state: {self._state}")
             else:
                 _LOGGER.warning(f"No {self._data_type} data available")
-                self._available = False  # Mark as unavailable when no data
+                self._available = False
         except Exception as e:
             _LOGGER.error(f"Error updating sensor {self._name}: {str(e)}")
-            self._available = False  # Mark as unavailable on error
-            # Don't raise the exception - let the sensor continue trying
+            self._available = False
+
+    @property
+    def force_update(self) -> bool:
+        """Return True if state updates should be forced.
+        If True, a state change will be triggered anytime the state property is updated
+        even if the value hasn't changed.
+        """
+        return self._force_update
+
+    @property
+    def extra_state_attributes(self):
+        """Return additional sensor state attributes."""
+        return {
+            'last_update': self._data_collector.last_update.isoformat() if self._data_collector.last_update else None,
+            'data_type': self._data_type,
+            'data_attribute': self._data_attr,
+        }
 
     @property
     def available(self) -> bool:

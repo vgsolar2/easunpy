@@ -64,7 +64,7 @@ class AsyncISolar:
             # Operating mode - changed from 600 to 590 which is the correct register
             (590, 2),  # system status
             
-            (703, 2), # PV generated today and total.
+            (702, 3), # PV generated today and total.
             
         ]
         
@@ -100,7 +100,7 @@ class AsyncISolar:
                 pv2_current=pv2_data[1] / 10.0,
                 pv2_power=pv2_data[2],
                 pv_generated_today=pv_generated_acc[0] / 100.0,
-                pv_generated_total=pv_generated_acc[1] / 100.0
+                pv_generated_total=pv_generated_acc[2] / 100.0
             )
         
         # Create GridData
