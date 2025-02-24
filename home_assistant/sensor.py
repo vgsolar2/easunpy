@@ -36,6 +36,14 @@ class DataCollector:
         self._last_update_start = None
         self._update_timeout = 30  # 30 seconds timeout for updates
 
+    async def is_update_stuck(self) -> bool:
+        """Check if the update process is stuck."""
+        if self._last_update_start is None:
+            return False
+        
+        time_since_update = (datetime.now() - self._last_update_start).total_seconds()
+        return time_since_update > self._update_timeout
+
     async def update_data(self):
         """Fetch all data from the inverter asynchronously using bulk request."""
         if not await self._lock.acquire():
