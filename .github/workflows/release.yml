@@ -23,9 +23,7 @@ jobs:
 
       - name: Create ZIP with correct structure
         run: |
-          mkdir -p custom_components/easun_inverter
-          cp -r home_assistant/* custom_components/easun_inverter/
-          zip -r easun_inverter.zip custom_components README.md hacs.json
+          zip -r custom_components README.md hacs.json
 
       - name: Create Release
         id: create_release
