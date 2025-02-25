@@ -3,7 +3,6 @@ import struct
 import time
 import logging  # Import logging
 
-import pandas as pd
 from easunpy.crc import crc16_modbus
 
 # Set up logging
