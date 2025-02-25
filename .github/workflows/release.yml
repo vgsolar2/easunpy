@@ -3,7 +3,7 @@ name: Create Release
 on:
   push:
     paths:
-      - 'home_assistant/manifest.json'
+      - 'custom_components/easun_inverter/manifest.json'
     branches:
       - main
 
