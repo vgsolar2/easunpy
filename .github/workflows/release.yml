@@ -18,7 +18,7 @@ jobs:
       - name: Get Version
         id: version
         run: |
-          VERSION=$(jq -r .version home_assistant/manifest.json)
+          VERSION=$(jq -r .version custom_components/easun_inverter/manifest.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create ZIP with correct structure
