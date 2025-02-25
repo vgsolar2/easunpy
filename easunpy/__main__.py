@@ -50,7 +50,10 @@ def create_dashboard(inverter_data: InverterData, status_message: str | Text = "
     
     if inverter_data.system:
         # Show operating mode with appropriate color
-        mode_style = "green" if inverter_data.system.operating_mode != OperatingMode.FAULT else "red bold"
+        mode_style = "green"  # Default to green
+        if "UNKNOWN" in inverter_data.system.mode_name:
+            mode_style = "red bold"
+            
         system_table.add_row("Operating Mode", Text(inverter_data.system.mode_name, style=mode_style))
         
         # Show inverter's internal time
