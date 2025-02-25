@@ -1,52 +1,122 @@
 # EasunPy
 
-EasunPy is a tool for monitoring Easun ISolar inverters. It provides a command-line interface and a simple script for easy setup and monitoring.
+EasunPy is a Python library and monitoring tool for Easun ISolar inverters. It provides both a command-line interface for monitoring and a Home Assistant integration through HACS.
 
 ## Features
 
-- Monitor Easun ISolar inverters using a command-line interface.
-- Display inverter data such as battery status, solar status, grid status, and output status.
-- Live mode for continuous updates.
+- Auto-discovery of inverters on the network
+- Real-time monitoring of:
+  - Battery status (voltage, current, power, SOC, temperature)
+  - Solar status (PV power, charging, daily/total generation)
+  - Grid status (voltage, power, frequency)
+  - Output status (voltage, current, power, load)
+  - System status (operating mode, inverter time)
+- Home Assistant integration via HACS
+- Interactive dashboard for continuous monitoring
+- Simple output mode for scripting
 
 ## Quick Start with `monitor.sh`
 
-For an easy setup, you can use the `monitor.sh` script. This script simplifies the process of starting the monitor by automatically detecting your local IP address and allowing you to specify the inverter IP and update interval.
+The `monitor.sh` script provides an easy way to start monitoring your inverter. It supports both auto-discovery and manual configuration.
 
-### Usage
+### Basic Usage
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/yourusername/easunpy.git
-   cd easunpy
-   ```
+```bash
+# Auto-discover inverter and show single update
+./monitor.sh
 
-2. **Run the monitor script**:
-   ```bash
-   ./monitor.sh --inverter-ip <INVERTER_IP> [--interval <SECONDS>] [--live]
-   ```
+# Show continuous dashboard view
+./monitor.sh --continuous
 
-   - `--inverter-ip`: Specify the IP address of your inverter.
-   - `--interval`: Set the update interval in seconds (default is 5 seconds).
-   - `--live`: Enable live mode for continuous updates (minimum interval is 15 seconds).
+# Specify inverter IP manually
+./monitor.sh --inverter-ip 192.168.1.100
 
-### Example
+# Specify local network interface
+./monitor.sh --local-ip 192.168.1.2
 
-``` bash
-./monitor.sh --inverter-ip 192.168.1.129 --interval 10 --live
+# Custom update interval
+./monitor.sh --interval 10 --continuous
 ```
 
+### Command Line Options
 
-This command will start monitoring the inverter at IP `192.168.1.129` with updates every 10 seconds in live mode.
+- `--inverter-ip IP`: Manually specify inverter IP address
+- `--local-ip IP`: Manually specify local network interface
+- `--interval N`: Update interval in seconds (default: 5)
+- `--continuous`: Show interactive dashboard with continuous updates
+- `--single`: Run once and exit (default mode)
+- `--debug`: Enable debug logging
+- `--help`: Show help message
 
 ## Home Assistant Integration
 
-We are currently working on integrating EasunPy with Home Assistant to provide a seamless experience for home automation enthusiasts. Stay tuned for updates!
+EasunPy can be integrated with Home Assistant through HACS (Home Assistant Community Store).
+
+### Installation via HACS
+
+1. Make sure you have [HACS](https://hacs.xyz) installed
+2. Go to HACS > Integrations
+3. Click the "+" button
+4. Search for "Easun"
+5. Click "Download"
+6. Restart Home Assistant
+
+### Manual Installation
+
+1. Copy the `home_assistant` folder into `custom_components/easun_inverter` directory to your Home Assistant installation.
+2. Restart Home Assistant
+
+### Configuration
+
+1. Go to Settings > Devices & Services
+2. Click "Add Integration"
+3. Search for "Easun"
+4. Follow the configuration steps:
+   - The integration will attempt to auto-discover your inverter
+   - If auto-discovery fails, you can manually enter the inverter IP
+   - Configure the update interval (minimum 15 seconds)
+
+### Available Sensors
+
+The integration provides sensors for:
+- Battery: voltage, current, power, SOC, temperature
+- Solar: total power, charging power, PV1/PV2 details, daily/total generation
+- Grid: voltage, power, frequency
+- Output: voltage, current, power, load percentage, frequency
+- System: operating mode, inverter time
+
+## Development
+
+### Requirements
+
+- Python 3.9 or higher
+- `rich` library for dashboard display
+- `asyncio` for async operations
+
+### Installation for Development
+
+```bash
+git clone https://github.com/yourusername/easunpy.git
+cd easunpy
+pip install -e .
+```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a pull request or open an issue.
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Areas for Contribution
+
+- Additional inverter features support
+- Documentation improvements
+- Bug fixes and testing
+- UI/UX improvements
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+Thanks to all contributors and the Home Assistant community for their support and feedback.
 
