@@ -23,7 +23,7 @@ jobs:
 
       - name: Create ZIP with correct structure
         run: |
-          zip -r custom_components README.md hacs.json
+          zip -r easun_inverter.zip custom_components README.md hacs.json
 
       - name: Create Release
         id: create_release
