@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Command-line interface for EasunPy"""
 
 import asyncio
@@ -10,77 +11,96 @@ from rich.text import Text
 from datetime import datetime
 from .async_isolar import AsyncISolar, OperatingMode
 from .utils import get_local_ip
+from .discover import discover_device
+from .models import BatteryData, PVData, GridData, OutputData, SystemStatus
 import logging
 
 class InverterData:
+    """Data collector for inverter data."""
     def __init__(self):
-        self.battery = None
-        self.pv = None
-        self.grid = None
-        self.output = None
-        self.system = None
+        self.battery: BatteryData | None = None
+        self.pv: PVData | None = None
+        self.grid: GridData | None = None
+        self.output: OutputData | None = None
+        self.system: SystemStatus | None = None
+        self._last_update = None
+
+    def update(self, battery, pv, grid, output, status):
+        """Update all data points."""
+        self.battery = battery
+        self.pv = pv
+        self.grid = grid
+        self.output = output
+        self.system = status
+        self._last_update = datetime.now()
+
+    @property
+    def last_update(self):
+        """Get the last update time."""
+        return self._last_update
 
 def create_dashboard(inverter_data: InverterData, status_message: str | Text = "") -> Layout:
     """Create a dashboard layout with inverter data."""
     layout = Layout()
-    
-    # Use the data from the InverterData instance
-    battery = inverter_data.battery
-    pv = inverter_data.pv
-    grid = inverter_data.grid
-    output = inverter_data.output
-    system = inverter_data.system
     
     # Create tables for each section
     system_table = Table(title="System Status")
     system_table.add_column("Parameter")
     system_table.add_column("Value")
     
-    if system:
-        mode_style = "green" if system.operating_mode != OperatingMode.FAULT else "red bold"
-        system_table.add_row("Operating Mode", Text(system.mode_name, style=mode_style))
+    if inverter_data.system:
+        # Show operating mode with appropriate color
+        mode_style = "green" if inverter_data.system.operating_mode != OperatingMode.FAULT else "red bold"
+        system_table.add_row("Operating Mode", Text(inverter_data.system.mode_name, style=mode_style))
+        
+        # Show inverter's internal time
+        if inverter_data.system.inverter_time:
+            system_table.add_row(
+                "Inverter Time", 
+                inverter_data.system.inverter_time.strftime('%Y-%m-%d %H:%M:%S')
+            )
 
     battery_table = Table(title="Battery Status")
     battery_table.add_column("Parameter")
     battery_table.add_column("Value")
     
-    if battery:
-        battery_table.add_row("Voltage", f"{battery.voltage:.1f}V")
-        battery_table.add_row("Current", f"{battery.current:.1f}A")
-        battery_table.add_row("Power", f"{battery.power}W")
-        battery_table.add_row("State of Charge", f"{battery.soc}%")
-        battery_table.add_row("Temperature", f"{battery.temperature}°C")
+    if inverter_data.battery:
+        battery_table.add_row("Voltage", f"{inverter_data.battery.voltage:.1f}V")
+        battery_table.add_row("Current", f"{inverter_data.battery.current:.1f}A")
+        battery_table.add_row("Power", f"{inverter_data.battery.power}W")
+        battery_table.add_row("State of Charge", f"{inverter_data.battery.soc}%")
+        battery_table.add_row("Temperature", f"{inverter_data.battery.temperature}°C")
 
     pv_table = Table(title="Solar Status")
     pv_table.add_column("Parameter")
     pv_table.add_column("Value")
     
-    if pv:
-        pv_table.add_row("Total Power", f"{pv.total_power}W")
-        pv_table.add_row("Charging Power", f"{pv.charging_power}W")
-        pv_table.add_row("Charging Current", f"{pv.charging_current:.1f}A")
-        pv_table.add_row("PV1 Voltage", f"{pv.pv1_voltage:.1f}V")
-        pv_table.add_row("PV1 Current", f"{pv.pv1_current:.1f}A")
-        pv_table.add_row("PV1 Power", f"{pv.pv1_power}W")
-        pv_table.add_row("PV2 Voltage", f"{pv.pv2_voltage:.1f}V")
-        pv_table.add_row("PV2 Current", f"{pv.pv2_current:.1f}A")
-        pv_table.add_row("PV2 Power", f"{pv.pv2_power}W")
+    if inverter_data.pv:
+        pv_table.add_row("Total Power", f"{inverter_data.pv.total_power}W")
+        pv_table.add_row("Charging Power", f"{inverter_data.pv.charging_power}W")
+        pv_table.add_row("Charging Current", f"{inverter_data.pv.charging_current:.1f}A")
+        pv_table.add_row("PV1 Voltage", f"{inverter_data.pv.pv1_voltage:.1f}V")
+        pv_table.add_row("PV1 Current", f"{inverter_data.pv.pv1_current:.1f}A")
+        pv_table.add_row("PV1 Power", f"{inverter_data.pv.pv1_power}W")
+        pv_table.add_row("PV2 Voltage", f"{inverter_data.pv.pv2_voltage:.1f}V")
+        pv_table.add_row("PV2 Current", f"{inverter_data.pv.pv2_current:.1f}A")
+        pv_table.add_row("PV2 Power", f"{inverter_data.pv.pv2_power}W")
 
     grid_output_table = Table(title="Grid & Output Status")
     grid_output_table.add_column("Parameter")
     grid_output_table.add_column("Value")
     
-    if grid:
-        grid_output_table.add_row("Grid Voltage", f"{grid.voltage:.1f}V")
-        grid_output_table.add_row("Grid Power", f"{grid.power}W")
-        grid_output_table.add_row("Grid Frequency", f"{grid.frequency/100:.2f}Hz")
+    if inverter_data.grid:
+        grid_output_table.add_row("Grid Voltage", f"{inverter_data.grid.voltage:.1f}V")
+        grid_output_table.add_row("Grid Power", f"{inverter_data.grid.power}W")
+        grid_output_table.add_row("Grid Frequency", f"{inverter_data.grid.frequency/100:.2f}Hz")
     
-    if output:
-        grid_output_table.add_row("Output Voltage", f"{output.voltage:.1f}V")
-        grid_output_table.add_row("Output Current", f"{output.current:.1f}A")
-        grid_output_table.add_row("Output Power", f"{output.power}W")
-        grid_output_table.add_row("Output Load", f"{output.load_percentage}%")
-        grid_output_table.add_row("Output Frequency", f"{output.frequency/100:.1f}Hz")
+    if inverter_data.output:
+        grid_output_table.add_row("Output Voltage", f"{inverter_data.output.voltage:.1f}V")
+        grid_output_table.add_row("Output Current", f"{inverter_data.output.current:.1f}A")
+        grid_output_table.add_row("Output Power", f"{inverter_data.output.power}W")
+        grid_output_table.add_row("Output Load", f"{inverter_data.output.load_percentage}%")
+        grid_output_table.add_row("Output Frequency", f"{inverter_data.output.frequency/100:.1f}Hz")
 
     # Add timestamp and status with right alignment for status
     header = Table.grid(padding=(0, 1))
@@ -93,10 +113,12 @@ def create_dashboard(inverter_data: InverterData, status_message: str | Text = "
     else:
         status_text = status_message
     
-    header.add_row(
-        Text(f"Last Update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", style="white"),
-        status_text
-    )
+    # Show both local time and last update time
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    last_update = inverter_data.last_update.strftime('%Y-%m-%d %H:%M:%S') if inverter_data.last_update else "Never"
+    
+    time_text = Text(f"Local Time: {current_time}\nLast Update: {last_update}", style="white")
+    header.add_row(time_text, status_text)
 
     # Create layout with better organization
     layout.split_column(
@@ -156,65 +178,63 @@ def create_info_layout(inverter_ip: str, local_ip: str, serial_number: str, stat
     return layout
 
 async def main():
-    # Configure logging
-    logging.basicConfig(
-        level=logging.ERROR,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-    )
-    
-    logging.getLogger('easunpy').setLevel(logging.ERROR)
-
-    parser = argparse.ArgumentParser(description='Monitor Easun ISolar Inverter')
-    parser.add_argument('--inverter-ip', type=str, help='Inverter IP address')
-    parser.add_argument('--interval', type=int, default=15, help='Update interval in seconds')
-    parser.add_argument('--live', action='store_true', help='Live mode - update continuously')
+    parser = argparse.ArgumentParser(description='Easun Inverter Monitor')
+    parser.add_argument('--inverter-ip', help='IP address of the inverter (optional, will auto-discover if not provided)')
+    parser.add_argument('--local-ip', help='Local IP address to bind to (optional, will auto-detect if not provided)')
+    parser.add_argument('--interval', type=int, default=5, help='Update interval in seconds (default: 5)')
+    parser.add_argument('--continuous', action='store_true', help='Continuously monitor (default: False)')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     
     args = parser.parse_args()
 
-    local_ip = get_local_ip()
+    # Configure logging
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    # Auto-detect local IP if not provided
+    local_ip = args.local_ip or get_local_ip()
     if not local_ip:
         print("Error: Could not determine local IP address")
-        return
-    
-    if not args.inverter_ip:
-        from easunpy.discover import discover_device
+        return 1
+
+    # Auto-discover inverter if IP not provided
+    inverter_ip = args.inverter_ip
+    if not inverter_ip:
         print("Discovering inverter IP...")
-        device_ip = discover_device()
-        if device_ip:
-            args.inverter_ip = device_ip
-            print(f"Discovered inverter IP: {args.inverter_ip}")
+        inverter_ip = discover_device()
+        if inverter_ip:
+            print(f"Found inverter at: {inverter_ip}")
         else:
             print("Error: Could not discover inverter IP")
-            return
-    
+            return 1
+
     console = Console()
     
     try:
         with Live(console=console, screen=True, refresh_per_second=4) as live:
-            inverter = AsyncISolar(args.inverter_ip, local_ip)
-            
-            layout = create_info_layout(args.inverter_ip, local_ip, "XXXXXXXX", "Initializing connection...")
-            live.update(layout)
-            
+            inverter = AsyncISolar(inverter_ip, local_ip)
             inverter_data = InverterData()
             
             while True:
-                layout = create_dashboard(inverter_data, "Updating all system data...")
-                live.update(layout)
+                try:
+                    # Use the bulk read method to get all data at once
+                    battery, pv, grid, output, status = await inverter.get_all_data()
+                    
+                    # Update all data points
+                    inverter_data.update(battery, pv, grid, output, status)
+                    
+                    layout = create_dashboard(inverter_data, "Update successful")
+                    live.update(layout)
+                except Exception as e:
+                    layout = create_dashboard(inverter_data, Text(f"Error: {str(e)}", style="red"))
+                    live.update(layout)
                 
-                # Use the bulk read method to get all data at once
-                battery, pv, grid, output, status = await inverter.get_all_data()
-                
-                # Update the inverter data object
-                inverter_data.battery = battery
-                inverter_data.pv = pv
-                inverter_data.grid = grid
-                inverter_data.output = output
-                inverter_data.system = status
-                
-                layout = create_dashboard(inverter_data, "Update done")
-                live.update(layout)
-                
+                if not args.continuous:
+                    break
+                    
                 for remaining in range(args.interval - 1, 0, -1):
                     layout = create_dashboard(inverter_data, f"Next update in {remaining} seconds...")
                     live.update(layout)
@@ -222,11 +242,10 @@ async def main():
                 
     except KeyboardInterrupt:
         console.print("\nMonitoring stopped by user")
+        return 0
     except Exception as e:
         console.print(f"\n[red]Error: {str(e)}")
-        backoff_time = min(args.interval * 2, 60)
-        console.print(f"\n[red]Backing off for {backoff_time} seconds due to error.")
-        await asyncio.sleep(backoff_time)
+        return 1
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    exit(asyncio.run(main())) 
