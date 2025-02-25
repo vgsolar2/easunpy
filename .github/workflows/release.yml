@@ -21,10 +21,11 @@ jobs:
           VERSION=$(jq -r .version home_assistant/manifest.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create ZIP for Home Assistant
+      - name: Create ZIP with correct structure
         run: |
-          cd home_assistant
-          zip -r ../easun_inverter.zip ./*
+          mkdir -p custom_components/easun_inverter
+          cp -r home_assistant/* custom_components/easun_inverter/
+          zip -r easun_inverter.zip custom_components
 
       - name: Create Release
         id: create_release
