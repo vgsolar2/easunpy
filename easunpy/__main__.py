@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.layout import Layout
 from rich.text import Text
 from datetime import datetime
-from .async_isolar import AsyncISolar, OperatingMode
+from .async_isolar import AsyncISolar
 from .utils import get_local_ip
 from .discover import discover_device
 from .models import BatteryData, PVData, GridData, OutputData, SystemStatus
@@ -129,14 +129,9 @@ def create_dashboard(inverter_data: InverterData, status_message: str | Text = "
         Layout(name="content", ratio=10)
     )
     
-    # Split content into system status and main content
-    layout["content"].split_column(
-        Layout(system_table, size=3),
-        Layout(name="tables", ratio=8)
-    )
-    
     # Split main content into three columns
-    layout["content"]["tables"].split_row(
+    layout["content"].split_row(
+        Layout(system_table, name="system"),
         Layout(battery_table, name="battery"),
         Layout(pv_table, name="pv"),
         Layout(grid_output_table, name="grid")
