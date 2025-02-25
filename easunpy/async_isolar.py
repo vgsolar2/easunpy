@@ -3,6 +3,7 @@ from typing import List, Optional
 from .async_modbusclient import AsyncModbusClient
 from .modbusclient import create_request, decode_modbus_response
 from .isolar import BatteryData, PVData, GridData, OutputData, SystemStatus, OperatingMode
+import datetime
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -43,7 +44,8 @@ class AsyncISolar:
     async def get_all_data(self) -> tuple[Optional[BatteryData], Optional[PVData], Optional[GridData], Optional[OutputData], Optional[SystemStatus]]:
         """Get all inverter data in a single bulk request."""
         register_groups = [
-            # (184, 1),  # Mode
+            (201, 1),  # Mode
+            
             # Battery data (277-281)
             (277, 5),  # voltage, current, power, soc, temperature
             
@@ -61,10 +63,7 @@ class AsyncISolar:
             # Frequency (used by both grid and output)
             (607, 1),  # frequency
             
-            # Operating mode - changed from 600 to 590 which is the correct register
-            (590, 2),  # system status
-            
-            (702, 3), # PV generated today and total.
+            (696, 10), # Time, PV generated today and total.
             
         ]
         
@@ -72,7 +71,20 @@ class AsyncISolar:
         if not results or len(results) != len(register_groups):
             return None, None, None, None, None
             
-        battery_data, pv_general, pv1_data, pv2_data, grid_data, output_data, freq, mode, pv_generated_acc = results
+        mode, battery_data, pv_general, pv1_data, pv2_data, grid_data, output_data, freq, others = results
+        
+        # Extract time data and create a timestamp
+        try:
+            year = others[0]
+            month = others[1]
+            day = others[2]
+            hour = others[3]
+            minute = others[4]
+            second = others[5]
+            inverter_timestamp = datetime.datetime(year, month, day, hour, minute, second)
+        except ValueError as e:
+            logger.error(f"Error creating timestamp: {e}")
+            inverter_timestamp = None
         
         # Create BatteryData
         battery = None
@@ -99,8 +111,8 @@ class AsyncISolar:
                 pv2_voltage=pv2_data[0] / 10.0,
                 pv2_current=pv2_data[1] / 10.0,
                 pv2_power=pv2_data[2],
-                pv_generated_today=pv_generated_acc[0] / 100.0,
-                pv_generated_total=pv_generated_acc[2] / 100.0
+                pv_generated_today=others[6] / 100.0,
+                pv_generated_total=others[7] / 100.0
             )
         
         # Create GridData
@@ -126,24 +138,25 @@ class AsyncISolar:
 
         # Create SystemStatus - improved error handling
         status = None
-        if len(mode) == 1:
+        try:
+            mode_value = mode[0]
+            logger.debug(f"Raw mode value: {mode_value}")
             try:
-                mode_value = mode[0]
-                logger.debug(f"Raw mode value: {mode_value}")
-                try:
-                    op_mode = OperatingMode(mode_value)
-                    status = SystemStatus(
-                        operating_mode=op_mode,
-                        mode_name=op_mode.name
-                    )
-                except ValueError:
-                    logger.warning(f"Unknown operating mode value: {mode_value}")
-                    status = SystemStatus(
-                        operating_mode=OperatingMode.FAULT,
-                        mode_name=f"UNKNOWN ({mode_value})"
-                    )
-            except Exception as e:
-                logger.error(f"Error processing system status: {e}")
-                status = None
+                op_mode = OperatingMode(mode_value)
+                status = SystemStatus(
+                    operating_mode=op_mode,
+                    mode_name=op_mode.name,
+                    inverter_time=inverter_timestamp
+                )
+            except ValueError:
+                logger.warning(f"Unknown operating mode value: {mode_value}")
+                status = SystemStatus(
+                    operating_mode=OperatingMode.FAULT,
+                    mode_name=f"UNKNOWN ({mode_value})",
+                    inverter_time=inverter_timestamp
+                )
+        except Exception as e:
+            logger.error(f"Error processing system status: {e}")
+            status = None
         
         return battery, pv, grid, output, status 

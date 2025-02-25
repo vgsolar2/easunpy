@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+import datetime
 
 @dataclass
 class BatteryData:
@@ -40,16 +41,11 @@ class OutputData:
     frequency: int
 
 class OperatingMode(Enum):
-    STANDBY = 0
-    GRID = 1
-    BATTERY = 2
-    FAULT = 3
-    HYBRID = 4
-    CHARGING = 5
-    BYPASS = 6
-    UPS = 7
+    SUB = 2
+    SBU = 3
 
 @dataclass
 class SystemStatus:
     operating_mode: OperatingMode
     mode_name: str 
+    inverter_time: datetime.datetime

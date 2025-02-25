@@ -123,7 +123,10 @@ class EasunSensor(SensorEntity):
         try:
             data = self._data_collector.get_data(self._data_type)
             if data:
-                value = getattr(data, self._data_attr)
+                if self._data_attr == "inverter_time":
+                    value = data.inverter_time.isoformat() if data.inverter_time else None
+                else:
+                    value = getattr(data, self._data_attr)
                 if self._value_converter is not None:
                     value = self._value_converter(value)
                 self._state = value
@@ -148,7 +151,6 @@ class EasunSensor(SensorEntity):
     def extra_state_attributes(self):
         """Return additional sensor state attributes."""
         return {
-            'last_update': self._data_collector.last_update.isoformat() if self._data_collector.last_update else None,
             'data_type': self._data_type,
             'data_attribute': self._data_attr,
         }
@@ -276,7 +278,8 @@ async def async_setup_entry(
         EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfApparentPower.VOLT_AMPERE, "output", "apparent_power"),
         EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage"),
         EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency", frequency_converter),
-        # EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name"),
+        EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name"),
+        EasunSensor(data_collector, "inverter_time", "Inverter Time", None, "system", "inverter_time"),
     ]
     
     add_entities(entities, True)
