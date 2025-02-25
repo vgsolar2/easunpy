@@ -1,0 +1,38 @@
+name: Create Release
+
+on:
+  push:
+    paths:
+      - 'home_assistant/manifest.json'
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Get Version
+        id: version
+        run: |
+          VERSION=$(jq -r .version home_assistant/manifest.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create ZIP for Home Assistant
+        run: |
+          cd home_assistant
+          zip -r ../easun_inverter.zip ./*
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          files: easun_inverter.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true 

@@ -1,0 +1,10 @@
+{
+    "name": "Easun Inverter Integration",
+    "content_in_root": false,
+    "domains": ["sensor"],
+    "homeassistant": "2021.12.0",
+    "render_readme": true,
+    "zip_release": false,
+    "filename": "custom_components/easun_inverter",
+    "iot_class": "local_polling"
+  }
