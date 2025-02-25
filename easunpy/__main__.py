@@ -175,12 +175,56 @@ def create_info_layout(inverter_ip: str, local_ip: str, serial_number: str, stat
 
     return layout
 
+async def print_single_update(inverter_data: InverterData):
+    """Print a single update in simple format."""
+    console = Console()
+    
+    if not inverter_data.system:
+        console.print("[red]No data received from inverter")
+        return
+
+    console.print("\n[bold]System Status")
+    console.print(f"Operating Mode: {inverter_data.system.mode_name}")
+    if inverter_data.system.inverter_time:
+        console.print(f"Inverter Time: {inverter_data.system.inverter_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    if inverter_data.battery:
+        console.print("\n[bold]Battery Status")
+        console.print(f"Voltage: {inverter_data.battery.voltage:.1f}V")
+        console.print(f"Current: {inverter_data.battery.current:.1f}A")
+        console.print(f"Power: {inverter_data.battery.power}W")
+        console.print(f"State of Charge: {inverter_data.battery.soc}%")
+        console.print(f"Temperature: {inverter_data.battery.temperature}°C")
+
+    if inverter_data.pv:
+        console.print("\n[bold]Solar Status")
+        console.print(f"Total Power: {inverter_data.pv.total_power}W")
+        console.print(f"Charging Power: {inverter_data.pv.charging_power}W")
+        console.print(f"PV1: {inverter_data.pv.pv1_voltage:.1f}V, {inverter_data.pv.pv1_current:.1f}A, {inverter_data.pv.pv1_power}W")
+        console.print(f"PV2: {inverter_data.pv.pv2_voltage:.1f}V, {inverter_data.pv.pv2_current:.1f}A, {inverter_data.pv.pv2_power}W")
+        console.print(f"Generated Today: {inverter_data.pv.pv_generated_today:.2f}kWh")
+        console.print(f"Generated Total: {inverter_data.pv.pv_generated_total:.2f}kWh")
+
+    if inverter_data.grid:
+        console.print("\n[bold]Grid Status")
+        console.print(f"Voltage: {inverter_data.grid.voltage:.1f}V")
+        console.print(f"Power: {inverter_data.grid.power}W")
+        console.print(f"Frequency: {inverter_data.grid.frequency/100:.2f}Hz")
+
+    if inverter_data.output:
+        console.print("\n[bold]Output Status")
+        console.print(f"Voltage: {inverter_data.output.voltage:.1f}V")
+        console.print(f"Current: {inverter_data.output.current:.1f}A")
+        console.print(f"Power: {inverter_data.output.power}W")
+        console.print(f"Load: {inverter_data.output.load_percentage}%")
+        console.print(f"Frequency: {inverter_data.output.frequency/100:.1f}Hz")
+
 async def main():
     parser = argparse.ArgumentParser(description='Easun Inverter Monitor')
     parser.add_argument('--inverter-ip', help='IP address of the inverter (optional, will auto-discover if not provided)')
     parser.add_argument('--local-ip', help='Local IP address to bind to (optional, will auto-detect if not provided)')
     parser.add_argument('--interval', type=int, default=5, help='Update interval in seconds (default: 5)')
-    parser.add_argument('--continuous', action='store_true', help='Continuously monitor (default: False)')
+    parser.add_argument('--continuous', action='store_true', help='Show continuous dashboard view (default: False)')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     
     args = parser.parse_args()
@@ -212,32 +256,36 @@ async def main():
     console = Console()
     
     try:
-        with Live(console=console, screen=True, refresh_per_second=4) as live:
-            inverter = AsyncISolar(inverter_ip, local_ip)
-            inverter_data = InverterData()
+        inverter = AsyncISolar(inverter_ip, local_ip)
+        inverter_data = InverterData()
+
+        if args.continuous:
+            # Use the existing dashboard view
+            with Live(console=console, screen=True, refresh_per_second=4) as live:
+                while True:
+                    try:
+                        battery, pv, grid, output, status = await inverter.get_all_data()
+                        inverter_data.update(battery, pv, grid, output, status)
+                        layout = create_dashboard(inverter_data, "Update successful")
+                        live.update(layout)
+                    except Exception as e:
+                        layout = create_dashboard(inverter_data, Text(f"Error: {str(e)}", style="red"))
+                        live.update(layout)
+                    
+                    for remaining in range(args.interval - 1, 0, -1):
+                        layout = create_dashboard(inverter_data, f"Next update in {remaining} seconds...")
+                        live.update(layout)
+                        await asyncio.sleep(1)
+        else:
+            # Single update with simple output
+            try:
+                battery, pv, grid, output, status = await inverter.get_all_data()
+                inverter_data.update(battery, pv, grid, output, status)
+                await print_single_update(inverter_data)
+            except Exception as e:
+                console.print(f"[red]Error: {str(e)}")
+                return 1
             
-            while True:
-                try:
-                    # Use the bulk read method to get all data at once
-                    battery, pv, grid, output, status = await inverter.get_all_data()
-                    
-                    # Update all data points
-                    inverter_data.update(battery, pv, grid, output, status)
-                    
-                    layout = create_dashboard(inverter_data, "Update successful")
-                    live.update(layout)
-                except Exception as e:
-                    layout = create_dashboard(inverter_data, Text(f"Error: {str(e)}", style="red"))
-                    live.update(layout)
-                
-                if not args.continuous:
-                    break
-                    
-                for remaining in range(args.interval - 1, 0, -1):
-                    layout = create_dashboard(inverter_data, f"Next update in {remaining} seconds...")
-                    live.update(layout)
-                    await asyncio.sleep(1)
-                
     except KeyboardInterrupt:
         console.print("\nMonitoring stopped by user")
         return 0
