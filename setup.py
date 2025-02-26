@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='easunpy',
-    version='0.1.24',
+    version='0.1.25',
     description='A tool for monitoring Easun ISolar inverters',
     author_email='vgsolar2@proton.me',
     url='https://github.com/vgsolar2/easunpy',
