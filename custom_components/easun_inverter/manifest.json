@@ -11,5 +11,5 @@
     "dataclasses>=0.6",
     "easunpy>=0.1.23"
   ],
-  "version": "1.0.0"
+  "version": "1.0.1"
 } 
