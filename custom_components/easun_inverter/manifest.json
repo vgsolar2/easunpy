@@ -1,14 +1,12 @@
 {
   "domain": "easun_inverter",
-  "name": "Easun Inverter",
-  "documentation": "",
+  "name": "Easun ISolar Inverter",
+  "documentation": "https://github.com/vgsolar2/easunpy",
+  "issue_tracker": "https://github.com/vgsolar2/easunpy/issues",
   "dependencies": [],
-  "codeowners": [],
-  "requirements": [
-    "dataclasses>=0.6",
-    "easunpy>=0.1.23"
-  ],
-  "version": "0.0.25",
+  "codeowners": ["@vgsolar2"],
+  "requirements": [],
+  "version": "1.0.0",
   "iot_class": "local_polling",
   "config_flow": true
 } 

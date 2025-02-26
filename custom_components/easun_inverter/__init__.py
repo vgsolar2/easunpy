@@ -1,14 +1,24 @@
-"""The Easun Inverter integration."""
+"""The Easun ISolar Inverter integration."""
 from __future__ import annotations
 
-from homeassistant.core import HomeAssistant
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant
+import homeassistant.helpers.config_validation as cv
 import logging
 from homeassistant.helpers.typing import ConfigType
 
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "easun_inverter"
+
+# List of platforms to support. There should be a matching .py file for each,
+# eg. switch.py and sensor.py
+PLATFORMS: list[Platform] = [Platform.SENSOR]
+
+# Use config_entry_only_config_schema since we only support config flow
+CONFIG_SCHEMA = cv.config_entry_only_config_schema("easun_inverter")
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate old entry."""
@@ -31,30 +41,30 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
     return True
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the Easun Inverter component."""
-    _LOGGER.debug("Setting up Easun Inverter component")
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up the Easun ISolar Inverter component."""
+    _LOGGER.debug("Setting up Easun ISolar Inverter component")
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Easun Inverter from a config entry."""
+    """Set up Easun ISolar Inverter from a config entry."""
     if entry.version == 1:
         # Migrate data from version 1 to version 2
         if not await async_migrate_entry(hass, entry):
             return False
             
-    _LOGGER.debug("Setting up Easun Inverter from config entry")
+    _LOGGER.debug("Setting up Easun ISolar Inverter from config entry")
     
     # Forward the setup to the sensor platform
-    await hass.config_entries.async_forward_entry_setup(entry, "sensor")
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    _LOGGER.debug("Unloading Easun Inverter config entry")
+    _LOGGER.debug("Unloading Easun ISolar Inverter config entry")
     
     # Unload the sensor platform
-    unload_ok = await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     
     return unload_ok 
