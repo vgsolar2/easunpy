@@ -1,0 +1,155 @@
+icon: mdi:transmission-tower
+theme: dark-mode
+type: custom:vertical-stack-in-card
+cards:
+  - type: vertical-stack
+    cards:
+      - type: custom:power-flow-card-plus
+        entities:
+          grid:
+            entity:
+              consumption: sensor.easun_grid_power
+            display_state: one_way
+            color_circle: true
+          solar:
+            entity: sensor.easun_pv_total_power
+          battery:
+            entity: sensor.easun_battery_power
+            state_of_charge: sensor.easun_battery_state_of_charge
+            display_state: one_way
+            color_circle: true
+            invert_state: true
+          home:
+            entity: sensor.easun_output_power
+            override_state: true
+          watt_threshold: 10000
+      - type: custom:layout-card
+        layout_type: custom:Horizontal-layout
+        layout:
+          width: 90
+          max_cols: 4
+        cards:
+          - type: custom:button-card
+            entity: sensor.easun_grid_energy_daily
+            name: Grid
+            icon: mdi:transmission-tower
+            show_state: true
+            size: 40%
+            styles:
+              card:
+                - height: 90px
+                - width: 90px
+                - display: flex
+                - flex-direction: column
+                - align-items: center
+                - justify-content: center
+                - text-align: center
+                - background: none
+                - box-shadow: none
+                - border: none
+              icon:
+                - color: "#1E90FF"
+                - width: 30px
+                - height: 30px
+              name:
+                - font-size: 14px
+                - text-align: center
+              state:
+                - font-size: 16px
+                - font-weight: bold
+                - text-align: center
+          - type: custom:button-card
+            entity: sensor.easun_pv_generated_today
+            name: Solar
+            icon: mdi:solar-power
+            show_state: true
+            size: 40%
+            styles:
+              card:
+                - height: 90px
+                - width: 90px
+                - display: flex
+                - flex-direction: column
+                - align-items: center
+                - justify-content: center
+                - text-align: center
+                - background: none
+                - box-shadow: none
+                - border: none
+              icon:
+                - color: "#FFA500"
+                - width: 30px
+                - height: 30px
+              name:
+                - font-size: 14px
+                - text-align: center
+              state:
+                - font-size: 16px
+                - font-weight: bold
+                - text-align: center
+          - type: custom:button-card
+            entity: sensor.easun_battery_charge_daily
+            state_display: |
+              [[[
+                return (entity.state / 1000).toFixed(2) + " kW";
+              ]]]
+            name: Charged
+            icon: mdi:battery-charging
+            show_state: true
+            size: 40%
+            styles:
+              card:
+                - height: 90px
+                - width: 90px
+                - display: flex
+                - flex-direction: column
+                - align-items: center
+                - justify-content: center
+                - text-align: center
+                - background: none
+                - box-shadow: none
+                - border: none
+              icon:
+                - color: "#00FFCC"
+                - width: 30px
+                - height: 30px
+              name:
+                - font-size: 14px
+                - text-align: center
+              state:
+                - font-size: 16px
+                - font-weight: bold
+                - text-align: center
+          - type: custom:button-card
+            entity: sensor.easun_battery_discharge_daily
+            state_display: |
+              [[[
+                return (entity.state / 1000).toFixed(2) + " kW";
+              ]]]
+            name: Discharged
+            icon: mdi:battery-arrow-up-outline
+            show_state: true
+            size: 40%
+            styles:
+              card:
+                - height: 90px
+                - width: 90px
+                - display: flex
+                - flex-direction: column
+                - align-items: center
+                - justify-content: center
+                - text-align: center
+                - background: none
+                - box-shadow: none
+                - border: none
+              icon:
+                - color: "#00FFCC"
+                - width: 30px
+                - height: 30px
+              name:
+                - font-size: 14px
+                - text-align: center
+              state:
+                - font-size: 16px
+                - font-weight: bold
+                - text-align: center
