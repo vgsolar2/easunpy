@@ -26,6 +26,7 @@ class AsyncISolar:
              
             if not responses or len(responses) != len(register_groups):
                 logger.warning(f"Incomplete or no responses received for bulk request. ${len(responses)} != ${len(register_groups)}")
+                logger.warning(f"Responses: {responses}")
                 return []
             
             # Decode each response

@@ -109,7 +109,7 @@ class AsyncModbusClient:
             await self._cleanup_server()  # Ensure clean state
             
             for attempt in range(retry_count):
-                logger.debug(f"Bulk send attempt {attempt + 1}/{retry_count}")
+                logger.info(f"Bulk send attempt {attempt + 1}/{retry_count}")
                 try:
                     if not await self.send_udp_discovery():
                         if attempt == retry_count - 1:
@@ -126,7 +126,7 @@ class AsyncModbusClient:
                             lambda r, w: self.handle_bulk_client(r, w, hex_commands, responses, response_future),
                             self.local_ip, self.port
                         )
-                        logger.debug(f"Server started on {self.local_ip}:{self.port}")
+                        logger.info(f"Server started on {self.local_ip}:{self.port}")
 
                         async with self._server:
                             try:
@@ -155,7 +155,7 @@ class AsyncModbusClient:
         try:
             self._active_connections.add(writer)
             client_addr = writer.get_extra_info('peername')
-            logger.debug(f"Client connected from {client_addr}")
+            logger.info(f"Client connected from {client_addr}")
             
             for command in commands:
                 try:
@@ -175,7 +175,7 @@ class AsyncModbusClient:
                             if not chunk:
                                 break
                             response += chunk
-
+                    logger.info
                     responses.append(response.hex())
                     await asyncio.sleep(0.1)
                 except asyncio.TimeoutError:
