@@ -21,6 +21,38 @@ EasunPy is a Python library and monitoring tool for Easun ISolar inverters. It p
 - Interactive dashboard for continuous monitoring
 - Simple output mode for scripting
 
+## Home Assistant Integration
+
+### Installation via HACS (Manual Repository)
+
+1. Open HACS in your Home Assistant instance
+2. Click the three dots in the top right corner and select "Custom repositories"
+3. Add the repository URL as shown:
+   ![Add Repository](img/add_repository.png)
+4. Select "Integration" as the category and click "Add"
+   ![Add Repository Details](img/add_repository_2.jpg)
+5. The integration will now appear in HACS
+6. Install it and restart Home Assistant
+
+### Configuration
+
+1. Go to Settings > Devices & Services
+2. Click "Add Integration"
+3. Search for "Easun Inverter"
+   ![Add Integration](img/add_integration.png)
+4. Follow the configuration steps:
+   - The integration will attempt to auto-discover your inverter
+   - If auto-discovery fails, you can manually enter the inverter IP
+   - Configure the update interval (minimum 15 seconds)
+
+### Example Dashboards
+
+The repository includes two example dashboard configurations:
+
+1. `ha-cockpit.yaml` - A simple dashboard that groups all sensors without any additional dependencies
+2. `ha-dashboard.yaml` - A more advanced dashboard with energy flow visualization (requires additional dependencies)
+   ![Dashboard Example](img/dashboard.png)
+
 ## Quick Start with `monitor.sh`
 
 The `monitor.sh` script provides an easy way to start monitoring your inverter. It supports both auto-discovery and manual configuration.
@@ -53,43 +85,6 @@ The `monitor.sh` script provides an easy way to start monitoring your inverter. 
 - `--single`: Run once and exit (default mode)
 - `--debug`: Enable debug logging
 - `--help`: Show help message
-
-## Home Assistant Integration
-
-EasunPy can be integrated with Home Assistant through HACS (Home Assistant Community Store).
-
-### Installation via HACS
-
-1. Make sure you have [HACS](https://hacs.xyz) installed
-2. Go to HACS > Integrations
-3. Click the "+" button
-4. Search for "Easun"
-5. Click "Download"
-6. Restart Home Assistant
-
-### Manual Installation
-
-1. Copy the `home_assistant` folder into `custom_components/easun_inverter` directory to your Home Assistant installation.
-2. Restart Home Assistant
-
-### Configuration
-
-1. Go to Settings > Devices & Services
-2. Click "Add Integration"
-3. Search for "Easun"
-4. Follow the configuration steps:
-   - The integration will attempt to auto-discover your inverter
-   - If auto-discovery fails, you can manually enter the inverter IP
-   - Configure the update interval (minimum 15 seconds)
-
-### Available Sensors
-
-The integration provides sensors for:
-- Battery: voltage, current, power, SOC, temperature
-- Solar: total power, charging power, PV1/PV2 details, daily/total generation
-- Grid: voltage, power, frequency
-- Output: voltage, current, power, load percentage, frequency
-- System: operating mode, inverter time
 
 ## Development
 
