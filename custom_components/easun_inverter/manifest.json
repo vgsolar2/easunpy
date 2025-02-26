@@ -7,6 +7,9 @@
   "documentation": "https://github.com/vgsolar2/easunpy",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/vgsolar2/easunpy/issues",
-  "requirements": [],
+  "requirements": [
+    "dataclasses>=0.6",
+    "easunpy>=0.1.23"
+  ],
   "version": "1.0.0"
 } 
