@@ -130,7 +130,7 @@ class AsyncModbusClient:
 
                         async with self._server:
                             try:
-                                await asyncio.wait_for(response_future, timeout=10)
+                                await asyncio.wait_for(response_future, timeout=30)
                                 if responses:
                                     return responses
                             except asyncio.TimeoutError:
