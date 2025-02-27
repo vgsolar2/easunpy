@@ -101,6 +101,7 @@ class AsyncModbusClient:
                 try:
                     await asyncio.wait_for(protocol.response_received, timeout=timeout)
                     result = protocol.response_received.result()
+                    print(f"UDP discovery result: {result}")
                     if result:
                         self._consecutive_udp_failures = 0  # Reset on success
                         return True
