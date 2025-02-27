@@ -11,13 +11,20 @@ logger = logging.getLogger(__name__)
 class AsyncISolar:
     def __init__(self, inverter_ip: str, local_ip: str):
         self.client = AsyncModbusClient(inverter_ip=inverter_ip, local_ip=local_ip)
+        self._transaction_id = 0x0772  # Start from the same ID seen in logs
+
+    def _get_next_transaction_id(self) -> int:
+        """Get next transaction ID and increment counter."""
+        current_id = self._transaction_id
+        self._transaction_id = (self._transaction_id + 1) & 0xFFFF  # Wrap around at 0xFFFF
+        return current_id
 
     async def _read_registers_bulk(self, register_groups: list[tuple[int, int]], data_format: str = "Int") -> list[Optional[list[int]]]:
         """Read multiple groups of registers in a single connection."""
         try:
-            # Create requests for each register group
+            # Create requests for each register group with incrementing transaction IDs
             requests = [
-                create_request(0x0777, 0x0001, 0x01, 0x03, start, count)
+                create_request(self._get_next_transaction_id(), 0x0001, 0x01, 0x03, start, count)
                 for start, count in register_groups
             ]
             
