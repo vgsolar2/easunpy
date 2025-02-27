@@ -72,7 +72,7 @@ class AsyncModbusClient:
             self._server = None
             self._active_connections.clear()
 
-    async def _find_available_port(self, start_port: int = 8899, max_attempts: int = 100) -> int:
+    async def _find_available_port(self, start_port: int = 8899, max_attempts: int = 20) -> int:
         """Find an available port starting from the given port."""
         for port in range(start_port, start_port + max_attempts):
             try:
