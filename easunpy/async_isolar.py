@@ -12,7 +12,6 @@ class AsyncISolar:
     def __init__(self, inverter_ip: str, local_ip: str):
         self.client = AsyncModbusClient(inverter_ip=inverter_ip, local_ip=local_ip)
         self._transaction_id = 0x0772  # Start from the same ID seen in logs
-        self.UNIVERSAL_ADDRESS = 0xF7   # Universal address for unknown inverter address
 
     def _get_next_transaction_id(self) -> int:
         """Get next transaction ID and increment counter."""
@@ -23,13 +22,9 @@ class AsyncISolar:
     async def _read_registers_bulk(self, register_groups: list[tuple[int, int]], data_format: str = "Int") -> list[Optional[list[int]]]:
         """Read multiple groups of registers in a single connection."""
         try:
-            # Create requests for each register group using universal address
+            # Create requests for each register group
             requests = [
-                create_request(self._get_next_transaction_id(), 
-                             0x0001,  # Protocol ID
-                             self.UNIVERSAL_ADDRESS,  # Use universal address instead of 0x01
-                             0x03,  # Read function
-                             start, count)
+                create_request(self._get_next_transaction_id(), 0x0001, 0x00, 0x03, start, count)
                 for start, count in register_groups
             ]
             
