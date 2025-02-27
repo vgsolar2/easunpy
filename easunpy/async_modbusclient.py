@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import socket
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -71,6 +72,19 @@ class AsyncModbusClient:
             self._server = None
             self._active_connections.clear()
 
+    async def _find_available_port(self, start_port: int = 8899, max_attempts: int = 100) -> int:
+        """Find an available port starting from the given port."""
+        for port in range(start_port, start_port + max_attempts):
+            try:
+                # Test if port is available
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.bind((self.local_ip, port))
+                sock.close()
+                return port
+            except OSError:
+                continue
+        raise RuntimeError(f"No available ports found between {start_port} and {start_port + max_attempts}")
+
     async def send_udp_discovery(self) -> bool:
         """Perform UDP discovery with adaptive timeout."""
         timeout = min(30, self._base_timeout * (1 + self._consecutive_udp_failures))
@@ -111,6 +125,13 @@ class AsyncModbusClient:
             for attempt in range(retry_count):
                 logger.info(f"Bulk send attempt {attempt + 1}/{retry_count}")
                 try:
+                    # Find an available port before starting the server
+                    try:
+                        self.port = await self._find_available_port(self.port)
+                    except RuntimeError as e:
+                        logger.error(f"Port allocation failed: {e}")
+                        continue
+
                     if not await self.send_udp_discovery():
                         if attempt == retry_count - 1:
                             logger.error("UDP discovery failed on final attempt")
