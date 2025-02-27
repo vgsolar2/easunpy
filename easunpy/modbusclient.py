@@ -104,36 +104,35 @@ def create_request(transaction_id: int, protocol_id: int, unit_id: int, function
                    register_address: int, register_offset: int) -> str:
     """
     Create a Modbus command with the correct length and CRC for the RTU packet.
-    Following the structure from the C# implementation.
     """
-    # Build the message frame first (for CRC calculation)
-    message_frame = bytearray([
-        unit_id,                                    # DeviceId
-        function_code,                              # Function
-        (register_address >> 8) & 0xFF,            # Register High
-        register_address & 0xFF,                    # Register Low
-        (register_offset >> 8) & 0xFF,             # Count High
-        register_offset & 0xFF                      # Count Low
+    # Construir el paquete RTU
+    rtu_packet = bytearray([
+        unit_id,
+        function_code,
+        (register_address >> 8) & 0xFF, register_address & 0xFF,
+        (register_offset >> 8) & 0xFF, register_offset & 0xFF
     ])
 
-    # Calculate CRC for the message frame
-    crc = crc16_modbus(message_frame)
+    # Calcular el CRC para el paquete RTU
+    crc = crc16_modbus(rtu_packet)
+    crc_low = crc & 0xFF
+    crc_high = (crc >> 8) & 0xFF
+
+    # Agregar CRC al paquete RTU
+    rtu_packet.extend([crc_low, crc_high])
     
-    # Build the complete packet
+    # Campo adicional `FF04`
+    rtu_packet = bytearray([0xFF, 0x04]) + rtu_packet
+    
+    # Calcular la longitud total (incluye solo RTU) + TCP
+    length = len(rtu_packet)
+    
+    # Construir el comando completo
     command = bytearray([
-        (transaction_id >> 8) & 0xFF,              # TID High
-        transaction_id & 0xFF,                      # TID Low
-        (protocol_id >> 8) & 0xFF,                 # DevCode High
-        protocol_id & 0xFF,                        # DevCode Low
-        0x00,                                      # Size High
-        0x0A,                                      # Size Low (fixed to 10 like in C# code)
-        0xFF,                                      # DevAdr (0xFF)
-        0x04,                                      # FuncCode (4)
-    ])
-
-    # Add message frame and CRC
-    command.extend(message_frame)
-    command.extend([crc & 0xFF, (crc >> 8) & 0xFF])
+        (transaction_id >> 8) & 0xFF, transaction_id & 0xFF,  # Transaction ID
+        (protocol_id >> 8) & 0xFF, protocol_id & 0xFF,        # Protocol ID
+        (length >> 8) & 0xFF, length & 0xFF                  # Longitud
+    ]) + rtu_packet
 
     return command.hex()
 
