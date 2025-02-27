@@ -9,7 +9,7 @@
   "issue_tracker": "https://github.com/vgsolar2/easunpy/issues",
   "requirements": [
     "dataclasses>=0.6",
-    "easunpy>=0.1.27"
+    "easunpy>=0.1.28"
   ],
-  "version": "1.0.6"
+  "version": "1.0.7"
 } 
