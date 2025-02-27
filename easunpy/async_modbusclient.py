@@ -162,7 +162,8 @@ class AsyncModbusClient:
                     if writer.is_closing():
                         logger.warning("Connection closed while processing commands")
                         break
-
+                    
+                    logger.warning(f"Sending command: {command}")
                     command_bytes = bytes.fromhex(command)
                     writer.write(command_bytes)
                     await writer.drain()
@@ -175,7 +176,7 @@ class AsyncModbusClient:
                             if not chunk:
                                 break
                             response += chunk
-                    logger.info
+                    logger.warning(f"Response: {response.hex()}")
                     responses.append(response.hex())
                     await asyncio.sleep(0.1)
                 except asyncio.TimeoutError:
