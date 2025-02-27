@@ -87,7 +87,7 @@ class DataCollector:
             _LOGGER.debug("DataCollector updated all data in bulk")
         except Exception as e:
             self._consecutive_failures += 1
-            delay = min(300, 2 ** self._consecutive_failures)  # Exponential backoff, max 5 minutes
+            delay = min(30, 2 ** self._consecutive_failures)  # Exponential backoff, max 5 minutes
             _LOGGER.error(f"Error updating data in bulk (attempt {self._consecutive_failures}): {str(e)}")
             _LOGGER.warning(f"Will retry with increased delay of {delay} seconds")
             await asyncio.sleep(delay)
