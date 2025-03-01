@@ -19,6 +19,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.event import async_track_time_interval
 
+from . import DOMAIN  # Import DOMAIN from __init__.py
 from easunpy.async_isolar import AsyncISolar
 
 _LOGGER = logging.getLogger(__name__)
@@ -185,6 +186,117 @@ class EasunSensor(SensorEntity):
         """Return the unit of measurement."""
         return self._unit
 
+class RegisterScanSensor(SensorEntity):
+    """Sensor that shows register scan results."""
+
+    def __init__(self, hass):
+        """Initialize the sensor."""
+        self._hass = hass
+        self._attr_name = "Easun Register Scan"
+        self._attr_unique_id = "easun_register_scan"
+        self._attr_native_value = "No scan performed"
+        self._attr_icon = "mdi:magnify"
+
+    @property
+    def extra_state_attributes(self):
+        """Return the state attributes."""
+        if DOMAIN in self._hass.data and "last_scan" in self._hass.data[DOMAIN]:
+            scan_data = self._hass.data[DOMAIN]["last_scan"]
+            
+            # Format the results for better display
+            formatted_results = {}
+            non_zero_count = 0
+            for r in scan_data["results"]:
+                formatted_results[r["hex"]] = {
+                    "register_dec": r["register"],
+                    "value": r["value"],
+                    "raw": r["raw"]
+                }
+                if r["value"] != 0:
+                    non_zero_count += 1
+            
+            return {
+                "timestamp": scan_data["timestamp"],
+                "scanned_range": f"{scan_data['start_register']} to {scan_data['start_register'] + scan_data['count']}",
+                "total_registers": len(scan_data["results"]),
+                "non_zero_registers": non_zero_count,
+                "results": formatted_results,
+                "common_registers": {
+                    "0x0115": "Battery data",
+                    "0x012E": "PV data",
+                    "0x015F": "Grid data",
+                    "0x0185": "Output data"
+                }
+            }
+        return {}
+
+    def update(self):
+        """Update the sensor."""
+        if DOMAIN in self._hass.data and "last_scan" in self._hass.data[DOMAIN]:
+            scan_data = self._hass.data[DOMAIN]["last_scan"]
+            total = len(scan_data["results"])
+            non_zero = sum(1 for r in scan_data["results"] if r["value"] != 0)
+            self._attr_native_value = f"Found {total} registers ({non_zero} non-zero)"
+
+class DeviceScanSensor(SensorEntity):
+    """Sensor that shows device scan results."""
+
+    def __init__(self, hass):
+        """Initialize the sensor."""
+        self._hass = hass
+        self._attr_name = "Easun Device Scan"
+        self._attr_unique_id = "easun_device_scan"
+        self._attr_native_value = "No scan performed"
+        self._attr_icon = "mdi:magnify-scan"
+
+    @property
+    def extra_state_attributes(self):
+        """Return the state attributes."""
+        if DOMAIN in self._hass.data and "device_scan" in self._hass.data[DOMAIN]:
+            scan_data = self._hass.data[DOMAIN]["device_scan"]
+            
+            # Count different response types
+            response_counts = {
+                "Valid Response": 0,
+                "Protocol Error": 0,
+                "No Response": 0,
+                "Invalid Response": 0,
+                "Error": 0
+            }
+            
+            for r in scan_data["results"]:
+                status = r["status"]
+                if status.startswith("Invalid Response"):
+                    response_counts["Invalid Response"] += 1
+                elif status.startswith("Error"):
+                    response_counts["Error"] += 1
+                else:
+                    response_counts[status] += 1
+            
+            return {
+                "timestamp": scan_data["timestamp"],
+                "scanned_range": f"0x{scan_data['start_id']:02x} to 0x{scan_data['end_id']:02x}",
+                "response_summary": response_counts,
+                "results": {
+                    r["hex"]: {
+                        "device_id": r["device_id"],
+                        "status": r["status"],
+                        "request": r["request"],
+                        "response": r["response"],
+                        "decoded": r.get("decoded")
+                    } for r in scan_data["results"] if r["status"] == "Valid Response"
+                }
+            }
+        return {}
+
+    def update(self):
+        """Update the sensor."""
+        if DOMAIN in self._hass.data and "device_scan" in self._hass.data[DOMAIN]:
+            scan_data = self._hass.data[DOMAIN]["device_scan"]
+            valid_responses = sum(1 for r in scan_data["results"] if r["status"] == "Valid Response")
+            total = len(scan_data["results"])
+            self._attr_native_value = f"Found {valid_responses} valid responses out of {total} devices"
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -207,6 +319,10 @@ async def async_setup_entry(
     
     isolar = AsyncISolar(inverter_ip=inverter_ip, local_ip=local_ip)
     data_collector = DataCollector(isolar)
+    
+    # Store the coordinator in the domain data under this entry's ID
+    hass.data[DOMAIN].setdefault(config_entry.entry_id, {})
+    hass.data[DOMAIN][config_entry.entry_id]["coordinator"] = data_collector
     
     # Schedule periodic updates
     is_updating = False
@@ -280,6 +396,8 @@ async def async_setup_entry(
         EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency", frequency_converter),
         EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name"),
         EasunSensor(data_collector, "inverter_time", "Inverter Time", None, "system", "inverter_time"),
+        RegisterScanSensor(hass),
+        DeviceScanSensor(hass),
     ]
     
     add_entities(entities, True)

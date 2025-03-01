@@ -1,0 +1,54 @@
+# Define the service
+register_scan:
+  name: Register Scan
+  description: Scan inverter registers to help identify register mappings
+  fields:
+    start_register:
+      name: Start Register
+      description: Starting register number
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 65535
+          step: 1
+          mode: box
+    register_count:
+      name: Register Count
+      description: How many registers to scan
+      required: false
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 1000
+          step: 1
+          mode: box
+
+device_scan:
+  name: Device ID Scan
+  description: Scan for device ID by trying different addresses
+  fields:
+    start_id:
+      name: Start ID
+      description: Starting device ID (default 0)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 255
+          step: 1
+          mode: box
+    end_id:
+      name: End ID
+      description: Ending device ID (default 255)
+      required: false
+      default: 255
+      selector:
+        number:
+          min: 0
+          max: 255
+          step: 1
+          mode: box 
