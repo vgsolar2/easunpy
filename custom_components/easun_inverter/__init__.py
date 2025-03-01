@@ -129,7 +129,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_device_scan(call: ServiceCall) -> None:
         """Handle the device ID scan service."""
         start_id = call.data.get("start_id", 0)
-        end_id = call.data.get("end_id", 255)
+        end_id = call.data.get("end_id", 5)
         
         entry_data = hass.data[DOMAIN].get(entry.entry_id)
         if not entry_data or "coordinator" not in entry_data:
@@ -142,17 +142,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.debug(f"Starting device scan from ID {start_id} to {end_id}")
         
         results = []
-        ERROR_RESPONSE = "077200010002ff04"  # Protocol error response
         
         for device_id in range(start_id, end_id + 1):
             try:
                 # Create request
-                request = create_request(
+                request = [create_request(
                     inverter._get_next_transaction_id(),
                     0x0001, device_id, 0x03,
                     0x0115,
                     1
-                )
+                )]
                 
                 # Send request and get raw response
                 responses = await inverter.client.send_bulk(request)
@@ -165,10 +164,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "request": request,
                     "response": response_hex,
                 }
+        
+                ERROR_RESPONSE = "00010002ff04"  # Protocol error response
                 
-                if response_hex == ERROR_RESPONSE:
-                    result["status"] = "Protocol Error"
-                    _LOGGER.debug(f"Device 0x{device_id:02x} gave protocol error: {response_hex}")
+                if response_hex: 
+                    if response_hex[4:] == ERROR_RESPONSE:
+                        result["status"] = "Protocol Error"
+                        _LOGGER.debug(f"Device 0x{device_id:02x} gave protocol error: {response_hex}")
+                    else:
+                        result["status"] = "Valid Response"
+                        _LOGGER.debug(f"Device 0x{device_id:02x} gave valid response: {response_hex}")
                 else:
                     _LOGGER.debug(f"Device 0x{device_id:02x} gave no response")
                     result["status"] = "No Response"
