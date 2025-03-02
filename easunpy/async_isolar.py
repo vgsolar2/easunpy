@@ -77,13 +77,14 @@ class AsyncISolar:
             (self.register_map.grid_frequency, 1),  # frequency
         ])
 
+        # Only add PV2 registers if supported by this model
+        if self.register_map.pv2_voltage:
+            register_groups.append((self.register_map.pv2_voltage, 3))  # PV2: voltage, current, power
+        
         # Add time and energy registers if supported
         if self.register_map.time_registers:
             register_groups.append((self.register_map.time_registers, 10))  # Time, PV generated today and total
         
-        # Only add PV2 registers if supported by this model
-        if self.register_map.pv2_voltage:
-            register_groups.append((self.register_map.pv2_voltage, 3))  # PV2: voltage, current, power
             
 
         results = await self._read_registers_bulk(register_groups)
