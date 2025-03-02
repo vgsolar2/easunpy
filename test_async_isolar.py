@@ -19,7 +19,7 @@ async def test_get_all_data():
         return
     
     # Initialize the AsyncISolar instance
-    inverter = AsyncISolar(inverter_ip, local_ip)
+    inverter = AsyncISolar(inverter_ip, local_ip, model="ISOLAR_SMG_II_11K")
     
     try:
         # Call the get_all_data method
