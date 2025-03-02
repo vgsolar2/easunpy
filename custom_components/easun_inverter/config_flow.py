@@ -75,11 +75,36 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
+            # Update the config entry with new options
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data={
+                    **self.config_entry.data,
+                    "inverter_ip": user_input["inverter_ip"],
+                    "local_ip": user_input["local_ip"],
+                    "model": user_input["model"],
+                },
+                options={
+                    "scan_interval": user_input["scan_interval"],
+                }
+            )
             return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
+                vol.Required(
+                    "inverter_ip",
+                    default=self.config_entry.data.get("inverter_ip")
+                ): str,
+                vol.Required(
+                    "local_ip",
+                    default=self.config_entry.data.get("local_ip")
+                ): str,
+                vol.Required(
+                    "model",
+                    default=self.config_entry.data.get("model", "ISOLAR_SMG_II_11K")
+                ): vol.In(list(REGISTER_MAPS.keys())),
                 vol.Optional(
                     "scan_interval",
                     default=self.config_entry.options.get(
