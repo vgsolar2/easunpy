@@ -70,10 +70,6 @@ class AsyncISolar:
             (self.register_map.pv1_voltage, 3),  # PV1: voltage, current, power
         ]
 
-        # Only add PV2 registers if supported by this model
-        if self.register_map.pv2_voltage:
-            register_groups.append((self.register_map.pv2_voltage, 3))  # PV2: voltage, current, power
-            
         # Add remaining register groups
         register_groups.extend([
             (self.register_map.grid_voltage, 3),  # voltage, current, power
@@ -84,6 +80,11 @@ class AsyncISolar:
         # Add time and energy registers if supported
         if self.register_map.time_registers:
             register_groups.append((self.register_map.time_registers, 10))  # Time, PV generated today and total
+        
+        # Only add PV2 registers if supported by this model
+        if self.register_map.pv2_voltage:
+            register_groups.append((self.register_map.pv2_voltage, 3))  # PV2: voltage, current, power
+            
 
         results = await self._read_registers_bulk(register_groups)
         
@@ -92,11 +93,19 @@ class AsyncISolar:
         battery_data = results[1] if results else None
         pv_general = results[2] if results else None
         pv1_data = results[3] if results else None
-        pv2_data = results[4] if results else None
-        grid_data = results[5] if results else None
-        output_data = results[6] if results else None
-        freq = results[7] if results else None
-        others = results[8] if results else None
+        grid_data = results[4] if results else None
+        output_data = results[5] if results else None
+        freq = results[6] if results else None
+            
+        if self.register_map.pv2_voltage:
+            pv2_data = results[7] if results else None
+        else:
+            pv2_data = None
+        
+        if self.register_map.time_registers:
+            others = results[8] if results else None
+        else:
+            others = None
 
         # Create BatteryData if we have the data
         battery = None

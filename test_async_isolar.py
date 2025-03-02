@@ -35,6 +35,9 @@ async def test_get_all_data():
     except Exception as e:
         # Print any exceptions that occur
         print(f"An error occurred: {e}")
+        import traceback
+        print("\nFull traceback:")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     # Configure logging to see debug output
