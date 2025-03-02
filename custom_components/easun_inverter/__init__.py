@@ -13,6 +13,7 @@ import os
 from aiofiles import open as async_open
 from aiofiles.os import makedirs, remove, symlink
 import asyncio
+from easunpy.async_isolar import AsyncISolar
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +54,15 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Easun ISolar Inverter from a config entry."""
+    inverter_ip = entry.data["inverter_ip"]
+    model = entry.data.get("model", "ISOLAR_SMG_II_11K")  # Default to original model if not specified
+    
+    # Get the local IP address
+    local_ip = get_local_ip()
+    
+    # Create API instance
+    api = AsyncISolar(inverter_ip=inverter_ip, local_ip=local_ip, model=model)
+    
     if entry.version == 1:
         if not await async_migrate_entry(hass, entry):
             return False

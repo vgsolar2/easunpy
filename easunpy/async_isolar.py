@@ -4,14 +4,18 @@ from .async_modbusclient import AsyncModbusClient
 from .modbusclient import create_request, decode_modbus_response
 from .isolar import BatteryData, PVData, GridData, OutputData, SystemStatus, OperatingMode
 import datetime
+from .models import REGISTER_MAPS, RegisterMap
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 class AsyncISolar:
-    def __init__(self, inverter_ip: str, local_ip: str):
+    def __init__(self, inverter_ip: str, local_ip: str, model: str = "ISOLAR_SMG_II_11K"):
         self.client = AsyncModbusClient(inverter_ip=inverter_ip, local_ip=local_ip)
-        self._transaction_id = 0x0772  # Start from the same ID seen in logs
+        self._transaction_id = 0x0772
+        if model not in REGISTER_MAPS:
+            raise ValueError(f"Unknown inverter model: {model}. Available models: {list(REGISTER_MAPS.keys())}")
+        self.register_map = REGISTER_MAPS[model]
 
     def _get_next_transaction_id(self) -> int:
         """Get next transaction ID and increment counter."""
@@ -56,29 +60,31 @@ class AsyncISolar:
     async def get_all_data(self) -> tuple[Optional[BatteryData], Optional[PVData], Optional[GridData], Optional[OutputData], Optional[SystemStatus]]:
         """Get all inverter data in a single bulk request."""
         register_groups = [
-            (201, 1),  # Mode
+            (self.register_map.operation_mode, 1),  # Mode
             
-            # Battery data (277-281)
-            (277, 5),  # voltage, current, power, soc, temperature
+            # Battery data
+            (self.register_map.battery_voltage, 5),  # voltage, current, power, soc, temperature
             
             # PV data
-            (302, 4),  # PV general: total_power, charging_power, charging_current, temperature
-            (351, 3),  # PV1: voltage, current, power
-            (389, 3),  # PV2: voltage, current, power
-            
-            # Grid data
-            (338, 3),  # voltage, current, power
-            
-            # Output data
-            (346, 5),  # voltage, current, power, apparent_power, load_percentage
-            
-            # Frequency (used by both grid and output)
-            (607, 1),  # frequency
-            
-            (696, 10), # Time, PV generated today and total.
-            
+            (self.register_map.pv_total_power, 4),  # total_power, charging_power, charging_current, temperature
+            (self.register_map.pv1_voltage, 3),  # PV1: voltage, current, power
         ]
-        
+
+        # Only add PV2 registers if supported by this model
+        if self.register_map.pv2_voltage:
+            register_groups.append((self.register_map.pv2_voltage, 3))  # PV2: voltage, current, power
+            
+        # Add remaining register groups
+        register_groups.extend([
+            (self.register_map.grid_voltage, 3),  # voltage, current, power
+            (self.register_map.output_voltage, 5),  # voltage, current, power, apparent_power, load_percentage
+            (self.register_map.grid_frequency, 1),  # frequency
+        ])
+
+        # Add time and energy registers if supported
+        if self.register_map.time_registers:
+            register_groups.append((self.register_map.time_registers, 10))  # Time, PV generated today and total
+
         results = await self._read_registers_bulk(register_groups)
         
         # Unpack results, handling None values
