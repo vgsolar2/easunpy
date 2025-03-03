@@ -12,5 +12,5 @@
     "easunpy>=0.1.34",
     "aiofiles>=23.2.1"
   ],
-  "version": "1.0.11"
+  "version": "1.0.12"
 } 
