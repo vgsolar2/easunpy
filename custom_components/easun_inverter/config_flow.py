@@ -35,14 +35,23 @@ class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             inverter_ip = user_input.get("inverter_ip")
             local_ip = user_input.get("local_ip")
             scan_interval = user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL)
-            model = user_input.get("model", "ISOLAR_SMG_II_11K")
+            model = user_input.get("model")  # Get model from input
+            
+            _LOGGER.warning(f"Processing user input with model: {model}")
             
             if not inverter_ip or not local_ip:
                 errors["base"] = "missing_ip"
             else:
+                entry_data = {
+                    "inverter_ip": inverter_ip,
+                    "local_ip": local_ip,
+                    "scan_interval": scan_interval,
+                    "model": model,
+                }
+                _LOGGER.warning(f"Creating entry with data: {entry_data}")
                 return self.async_create_entry(
                     title=f"Easun Inverter ({inverter_ip})",
-                    data=user_input,
+                    data=entry_data,
                 )
 
         # Attempt to discover the IPs
@@ -78,6 +87,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the options."""
         if user_input is not None:
             _LOGGER.warning(f"Updating config entry with new input: {user_input}")
+            
+            # Get the coordinator
+            entry_data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
+            if entry_data and "coordinator" in entry_data:
+                coordinator = entry_data["coordinator"]
+                # Update the model if it changed
+                if user_input["model"] != self.config_entry.data.get("model"):
+                    await coordinator.update_model(user_input["model"])
+            
             # Update the config entry with new options
             self.hass.config_entries.async_update_entry(
                 self.config_entry,

@@ -35,8 +35,9 @@ class DataCollector:
         self._consecutive_failures = 0
         self._max_consecutive_failures = 5
         self._last_update_start = None
-        self._last_successful_update = None  # Add timestamp for successful updates
-        self._update_timeout = 30  # 30 seconds timeout for updates
+        self._last_successful_update = None
+        self._update_timeout = 30
+        _LOGGER.info(f"DataCollector initialized with model: {self._isolar.register_map}")
 
     async def is_update_stuck(self) -> bool:
         """Check if the update process is stuck."""
@@ -74,6 +75,7 @@ class DataCollector:
     async def _do_update(self):
         """Actual update implementation."""
         try:
+            _LOGGER.debug(f"Starting data update using model: {self._isolar.register_map}")
             battery, pv, grid, output, status = await self._isolar.get_all_data()
             if all(x is None for x in (battery, pv, grid, output, status)):
                 raise Exception("No data received from inverter")
@@ -102,6 +104,11 @@ class DataCollector:
     def last_update(self):
         """Get the timestamp of the last successful update."""
         return self._last_successful_update
+
+    async def update_model(self, model: str):
+        """Update the inverter model."""
+        _LOGGER.info(f"Updating inverter model to: {model}")
+        self._isolar.update_model(model)
 
 class EasunSensor(SensorEntity):
     """Representation of an Easun Inverter sensor."""
@@ -312,12 +319,15 @@ async def async_setup_entry(
     
     inverter_ip = config_entry.data.get("inverter_ip")
     local_ip = config_entry.data.get("local_ip")
+    model = config_entry.data.get("model")
+    
+    _LOGGER.info(f"Setting up sensors with model: {model}")
     
     if not inverter_ip or not local_ip:
         _LOGGER.error("Missing inverter IP or local IP in config entry")
         return
     
-    isolar = AsyncISolar(inverter_ip=inverter_ip, local_ip=local_ip)
+    isolar = AsyncISolar(inverter_ip=inverter_ip, local_ip=local_ip, model=model)
     data_collector = DataCollector(isolar)
     
     # Store the coordinator in the domain data under this entry's ID

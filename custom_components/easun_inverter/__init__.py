@@ -13,8 +13,6 @@ import os
 from aiofiles import open as async_open
 from aiofiles.os import makedirs
 import asyncio
-from easunpy.async_isolar import AsyncISolar
-from easunpy.utils import get_local_ip
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,20 +29,20 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     """Migrate old entry."""
     _LOGGER.debug("Migrating from version %s", config_entry.version)
 
-    if config_entry.version == 1:
+    if config_entry.version < 4:
         new_data = {**config_entry.data}
         
-        # Add scan_interval with default value if it doesn't exist
-        if "scan_interval" not in new_data:
-            new_data["scan_interval"] = 30  # Default value
+        # Add model with default value if it doesn't exist
+        if "model" not in new_data:
+            new_data["model"] = "ISOLAR_SMG_II_11K"
             
         # Update the entry with new data and version
         hass.config_entries.async_update_entry(
             config_entry,
             data=new_data,
-            version=2
+            version=4
         )
-        _LOGGER.info("Migration to version %s successful", 2)
+        _LOGGER.info("Migration to version %s successful", 4)
 
     return True
 
@@ -55,21 +53,12 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Easun ISolar Inverter from a config entry."""
-    inverter_ip = entry.data["inverter_ip"]
-    model = entry.data.get("model", "ISOLAR_SMG_II_11K")
-    _LOGGER.warning(f"Setting up inverter with model: {model}, config data: {entry.data}")
-    
-    # Get the local IP address
-    local_ip = get_local_ip()
-    
-    # Create API instance
-    api = AsyncISolar(inverter_ip=inverter_ip, local_ip=local_ip, model=model)
-    
-    if entry.version == 1:
+    if entry.version < 4:
         if not await async_migrate_entry(hass, entry):
             return False
-            
-    _LOGGER.debug("Setting up Easun ISolar Inverter from config entry")
+
+    model = entry.data["model"]  # No default - should be required
+    _LOGGER.warning(f"Setting up inverter with model: {model}, config data: {entry.data}")
     
     # Initialize domain data
     hass.data.setdefault(DOMAIN, {})
