@@ -5,6 +5,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.core import callback
+import logging
 
 from . import DOMAIN
 from easunpy.discover import discover_device
@@ -12,6 +13,7 @@ from easunpy.utils import get_local_ip
 from easunpy.models import REGISTER_MAPS
 
 DEFAULT_SCAN_INTERVAL = 30  # Default to 30 seconds
+_LOGGER = logging.getLogger(__name__)
 
 class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Easun Inverter."""
@@ -75,6 +77,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
+            _LOGGER.warning(f"Updating config entry with new input: {user_input}")
             # Update the config entry with new options
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
@@ -87,6 +90,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 options={
                     "scan_interval": user_input["scan_interval"],
                 }
+            )
+            _LOGGER.warning(f"Updated config entry data: {self.config_entry.data}")
+            # Reload the config entry to apply changes
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self.config_entry.entry_id)
             )
             return self.async_create_entry(title="", data=user_input)
 

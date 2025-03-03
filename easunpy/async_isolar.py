@@ -13,6 +13,7 @@ class AsyncISolar:
     def __init__(self, inverter_ip: str, local_ip: str, model: str = "ISOLAR_SMG_II_11K"):
         self.client = AsyncModbusClient(inverter_ip=inverter_ip, local_ip=local_ip)
         self._transaction_id = 0x0772
+        logger.warning(f"AsyncISolar initialized with model: {model}")
         if model not in REGISTER_MAPS:
             raise ValueError(f"Unknown inverter model: {model}. Available models: {list(REGISTER_MAPS.keys())}")
         self.register_map = REGISTER_MAPS[model]

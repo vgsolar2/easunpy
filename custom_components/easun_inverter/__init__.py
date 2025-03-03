@@ -56,7 +56,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Easun ISolar Inverter from a config entry."""
     inverter_ip = entry.data["inverter_ip"]
-    model = entry.data.get("model", "ISOLAR_SMG_II_11K")  # Default to original model if not specified
+    model = entry.data.get("model", "ISOLAR_SMG_II_11K")
+    _LOGGER.warning(f"Setting up inverter with model: {model}, config data: {entry.data}")
     
     # Get the local IP address
     local_ip = get_local_ip()
