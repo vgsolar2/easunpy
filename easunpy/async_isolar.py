@@ -1,10 +1,10 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict, Tuple, Any
 from .async_modbusclient import AsyncModbusClient
 from .modbusclient import create_request, decode_modbus_response
 from .isolar import BatteryData, PVData, GridData, OutputData, SystemStatus, OperatingMode
 import datetime
-from .models import REGISTER_MAPS, RegisterMap
+from .models import MODEL_CONFIGS, ModelConfig
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -12,20 +12,23 @@ logger = logging.getLogger(__name__)
 class AsyncISolar:
     def __init__(self, inverter_ip: str, local_ip: str, model: str = "ISOLAR_SMG_II_11K"):
         self.client = AsyncModbusClient(inverter_ip=inverter_ip, local_ip=local_ip)
-        self.model = model
         self._transaction_id = 0x0772
+        
+        if model not in MODEL_CONFIGS:
+            raise ValueError(f"Unknown inverter model: {model}. Available models: {list(MODEL_CONFIGS.keys())}")
+        
+        self.model = model
+        self.model_config = MODEL_CONFIGS[model]
         logger.warning(f"AsyncISolar initialized with model: {model}")
-        if model not in REGISTER_MAPS:
-            raise ValueError(f"Unknown inverter model: {model}. Available models: {list(REGISTER_MAPS.keys())}")
-        self.register_map = REGISTER_MAPS[model]
 
     def update_model(self, model: str):
-        """Update the register map for a different model."""
-        if model not in REGISTER_MAPS:
-            raise ValueError(f"Unknown inverter model: {model}. Available models: {list(REGISTER_MAPS.keys())}")
+        """Update the model configuration."""
+        if model not in MODEL_CONFIGS:
+            raise ValueError(f"Unknown inverter model: {model}. Available models: {list(MODEL_CONFIGS.keys())}")
+        
         logger.warning(f"Updating AsyncISolar to model: {model}")
         self.model = model
-        self.register_map = REGISTER_MAPS[model]
+        self.model_config = MODEL_CONFIGS[model]
 
     def _get_next_transaction_id(self) -> int:
         """Get next transaction ID and increment counter."""
@@ -70,144 +73,174 @@ class AsyncISolar:
     async def get_all_data(self) -> tuple[Optional[BatteryData], Optional[PVData], Optional[GridData], Optional[OutputData], Optional[SystemStatus]]:
         """Get all inverter data in a single bulk request."""
         logger.warning(f"Getting all data for model: {self.model}")
-        register_groups = [
-            (self.register_map.operation_mode, 1),  # Mode
-            
-            # Battery data
-            (self.register_map.battery_voltage, 5),  # voltage, current, power, soc, temperature
-            
-            # PV data
-            (self.register_map.pv_total_power, 4),  # total_power, charging_power, charging_current, temperature
-            (self.register_map.pv1_voltage, 3),  # PV1: voltage, current, power
-        ]
-
-        # Add remaining register groups
-        register_groups.extend([
-            (self.register_map.grid_voltage, 3),  # voltage, current, power
-            (self.register_map.output_voltage, 5),  # voltage, current, power, apparent_power, load_percentage
-            (self.register_map.grid_frequency, 1),  # frequency
-        ])
-
-        # Only add PV2 registers if supported by this model
-        if self.register_map.pv2_voltage:
-            register_groups.append((self.register_map.pv2_voltage, 3))  # PV2: voltage, current, power
         
-        # Add time and energy registers if supported
-        if self.register_map.time_registers:
-            register_groups.append((self.register_map.time_registers, 10))  # Time, PV generated today and total
+        # Group registers efficiently for bulk reading
+        register_groups = self._create_register_groups()
         
-            
-
         results = await self._read_registers_bulk(register_groups)
-        
-        # Unpack results, handling None values
-        mode = results[0] if results else None
-        battery_data = results[1] if results else None
-        pv_general = results[2] if results else None
-        pv1_data = results[3] if results else None
-        grid_data = results[4] if results else None
-        output_data = results[5] if results else None
-        freq = results[6] if results else None
+        if not results:
+            return None, None, None, None, None
             
-        if self.register_map.pv2_voltage:
-            pv2_data = results[7] if results else None
-        else:
-            pv2_data = None
+        # Create a dictionary to store all the read values
+        values = {}
         
-        if self.register_map.time_registers:
-            others = results[8] if results else None
-        else:
-            others = None
-
-        # Create BatteryData if we have the data
-        battery = None
-        if battery_data and len(battery_data) == 5:
-            try:
-                battery = BatteryData(
-                    voltage=battery_data[0] / 10.0,
-                    current=battery_data[1] / 10.0,
-                    power=battery_data[2],
-                    soc=battery_data[3],
-                    temperature=battery_data[4]
-                )
-            except Exception as e:
-                logger.warning(f"Failed to create BatteryData: {e}")
-
-        # Create PVData if we have the required data
-        pv = None
-        if any([pv_general, pv1_data, pv2_data]):  # Create PV object if we have any PV data
-            try:
-                pv = PVData(
-                    total_power=pv_general[0] if pv_general else None,
-                    charging_power=pv_general[1] if pv_general else None,
-                    charging_current=(pv_general[2] / 10.0) if pv_general else None,
-                    temperature=pv_general[3] if pv_general else None,
-                    pv1_voltage=(pv1_data[0] / 10.0) if pv1_data else None,
-                    pv1_current=(pv1_data[1] / 10.0) if pv1_data else None,
-                    pv1_power=pv1_data[2] if pv1_data else None,
-                    pv2_voltage=(pv2_data[0] / 10.0) if pv2_data else None,
-                    pv2_current=(pv2_data[1] / 10.0) if pv2_data else None,
-                    pv2_power=pv2_data[2] if pv2_data else None,
-                    pv_generated_today=(others[6] / 100.0) if others else None,
-                    pv_generated_total=(others[7] / 100.0) if others else None
-                )
-            except Exception as e:
-                logger.warning(f"Failed to create PVData: {e}")
-
-        # Create GridData if we have the data
-        grid = None
-        if grid_data or freq:
-            try:
-                grid = GridData(
-                    voltage=(grid_data[0] / 10.0) if grid_data else None,
-                    power=grid_data[2] if grid_data else None,
-                    frequency=freq[0] if freq else None
-                )
-            except Exception as e:
-                logger.warning(f"Failed to create GridData: {e}")
-
-        # Create OutputData if we have the data
-        output = None
-        if output_data or freq:
-            try:
-                output = OutputData(
-                    voltage=(output_data[0] / 10.0) if output_data else None,
-                    current=(output_data[1] / 10.0) if output_data else None,
-                    power=output_data[2] if output_data else None,
-                    apparent_power=output_data[3] if output_data else None,
-                    load_percentage=output_data[4] if output_data else None,
-                    frequency=freq[0] if freq else None
-                )
-            except Exception as e:
-                logger.warning(f"Failed to create OutputData: {e}")
-
-        # Create SystemStatus
-        status = None
+        # Process the results and apply scaling factors
+        for i, (start_address, count) in enumerate(register_groups):
+            if results[i] is None:
+                continue
+                
+            # Find which registers these values correspond to
+            for reg_name, config in self.model_config.register_map.items():
+                if config.address >= start_address and config.address < start_address + count:
+                    # Calculate the index in the results array
+                    idx = config.address - start_address
+                    if idx < len(results[i]):
+                        # Process the value with the appropriate scaling factor
+                        values[reg_name] = self.model_config.process_value(reg_name, results[i][idx])
+        
+        # Create data objects from the processed values
+        battery = self._create_battery_data(values)
+        pv = self._create_pv_data(values)
+        grid = self._create_grid_data(values)
+        output = self._create_output_data(values)
+        status = self._create_system_status(values)
+        
+        return battery, pv, grid, output, status
+        
+    def _create_register_groups(self) -> list[tuple[int, int]]:
+        """Create optimized register groups for reading."""
+        # Get all valid register addresses
+        addresses = [
+            config.address for config in self.model_config.register_map.values() 
+            if config.address > 0  # Skip registers with address 0 (not supported)
+        ]
+        
+        if not addresses:
+            return []
+            
+        # Sort addresses
+        addresses.sort()
+        
+        # Group consecutive registers
+        groups = []
+        current_start = addresses[0]
+        current_end = current_start
+        
+        for addr in addresses[1:]:
+            # If address is consecutive or close enough, extend the current group
+            if addr <= current_end + 10:  # Allow small gaps to reduce number of requests
+                current_end = addr
+            else:
+                # Add the current group and start a new one
+                groups.append((current_start, current_end - current_start + 1))
+                current_start = addr
+                current_end = addr
+                
+        # Add the last group
+        groups.append((current_start, current_end - current_start + 1))
+        
+        return groups
+        
+    def _create_battery_data(self, values: Dict[str, Any]) -> Optional[BatteryData]:
+        """Create BatteryData object from processed values."""
         try:
+            if all(key in values for key in ["battery_voltage", "battery_current", "battery_power", "battery_soc", "battery_temperature"]):
+                return BatteryData(
+                    voltage=values["battery_voltage"],
+                    current=values["battery_current"],
+                    power=values["battery_power"],
+                    soc=values["battery_soc"],
+                    temperature=values["battery_temperature"]
+                )
+        except Exception as e:
+            logger.warning(f"Failed to create BatteryData: {e}")
+        return None
+        
+    def _create_pv_data(self, values: Dict[str, Any]) -> Optional[PVData]:
+        """Create PVData object from processed values."""
+        try:
+            # Check if we have at least some PV data
+            if any(key in values for key in ["pv_total_power", "pv1_voltage", "pv2_voltage"]):
+                return PVData(
+                    total_power=values.get("pv_total_power"),
+                    charging_power=values.get("pv_charging_power"),
+                    charging_current=values.get("pv_charging_current"),
+                    temperature=values.get("pv_temperature"),
+                    pv1_voltage=values.get("pv1_voltage"),
+                    pv1_current=values.get("pv1_current"),
+                    pv1_power=values.get("pv1_power"),
+                    pv2_voltage=values.get("pv2_voltage"),
+                    pv2_current=values.get("pv2_current"),
+                    pv2_power=values.get("pv2_power"),
+                    pv_generated_today=values.get("pv_energy_today"),
+                    pv_generated_total=values.get("pv_energy_total")
+                )
+        except Exception as e:
+            logger.warning(f"Failed to create PVData: {e}")
+        return None
+        
+    def _create_grid_data(self, values: Dict[str, Any]) -> Optional[GridData]:
+        """Create GridData object from processed values."""
+        try:
+            if any(key in values for key in ["grid_voltage", "grid_power", "grid_frequency"]):
+                return GridData(
+                    voltage=values.get("grid_voltage"),
+                    power=values.get("grid_power"),
+                    frequency=values.get("grid_frequency")
+                )
+        except Exception as e:
+            logger.warning(f"Failed to create GridData: {e}")
+        return None
+        
+    def _create_output_data(self, values: Dict[str, Any]) -> Optional[OutputData]:
+        """Create OutputData object from processed values."""
+        try:
+            if any(key in values for key in ["output_voltage", "output_power"]):
+                return OutputData(
+                    voltage=values.get("output_voltage"),
+                    current=values.get("output_current"),
+                    power=values.get("output_power"),
+                    apparent_power=values.get("output_apparent_power"),
+                    load_percentage=values.get("output_load_percentage"),
+                    frequency=values.get("output_frequency")
+                )
+        except Exception as e:
+            logger.warning(f"Failed to create OutputData: {e}")
+        return None
+        
+    def _create_system_status(self, values: Dict[str, Any]) -> Optional[SystemStatus]:
+        """Create SystemStatus object from processed values."""
+        try:
+            # Create timestamp if time registers are available
             inverter_timestamp = None
-            if others:
+            if all(f"time_register_{i}" in values for i in range(6)):
                 try:
-                    year, month, day, hour, minute, second = others[:6]
+                    year = values["time_register_0"]
+                    month = values["time_register_1"]
+                    day = values["time_register_2"]
+                    hour = values["time_register_3"]
+                    minute = values["time_register_4"]
+                    second = values["time_register_5"]
                     inverter_timestamp = datetime.datetime(year, month, day, hour, minute, second)
                 except Exception as e:
                     logger.warning(f"Failed to create timestamp: {e}")
 
-            if mode:
-                mode_value = mode[0]
+            # Create operating mode
+            if "operation_mode" in values:
+                mode_value = values["operation_mode"]
                 try:
                     op_mode = OperatingMode(mode_value)
-                    status = SystemStatus(
+                    return SystemStatus(
                         operating_mode=op_mode,
                         mode_name=op_mode.name,
                         inverter_time=inverter_timestamp
                     )
                 except ValueError:
-                    status = SystemStatus(
+                    return SystemStatus(
                         operating_mode=OperatingMode.FAULT,
                         mode_name=f"UNKNOWN ({mode_value})",
                         inverter_time=inverter_timestamp
                     )
         except Exception as e:
             logger.warning(f"Failed to create SystemStatus: {e}")
-
-        return battery, pv, grid, output, status 
+        return None 

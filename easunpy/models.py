@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import datetime
-from typing import Dict
+from typing import Dict, Optional, Callable, Any
 
 @dataclass
 class BatteryData:
@@ -52,110 +52,114 @@ class SystemStatus:
     inverter_time: datetime.datetime
 
 @dataclass
-class RegisterMap:
-    """Defines the register mapping for different inverter models."""
-    operation_mode: int
-    
-    # Battery registers
-    battery_voltage: int
-    battery_current: int
-    battery_power: int
-    battery_soc: int
-    battery_temperature: int
-    
-    # PV registers
-    pv_total_power: int
-    pv_charging_power: int
-    pv_charging_current: int
-    pv_temperature: int
-    pv1_voltage: int
-    pv1_current: int
-    pv1_power: int
-    pv2_voltage: int
-    pv2_current: int
-    pv2_power: int
-    
-    # Grid registers
-    grid_voltage: int
-    grid_current: int
-    grid_power: int
-    grid_frequency: int
-    
-    # Output registers
-    output_voltage: int
-    output_current: int
-    output_power: int
-    output_apparent_power: int
-    output_load_percentage: int
-    output_frequency: int
-    
-    # Time and energy registers
-    time_registers: int  # Starting register for year, month, day, hour, min, sec
-    pv_energy_today: int
-    pv_energy_total: int
+class RegisterConfig:
+    """Configuration for a single register."""
+    address: int
+    scale_factor: float = 1.0  # Default scale factor is 1.0 (no scaling)
+    processor: Optional[Callable[[int], Any]] = None  # Optional custom processor function
 
-# Define known inverter models
-REGISTER_MAPS = {
-    "ISOLAR_SMG_II_11K": RegisterMap(
-        operation_mode=201,
-        battery_voltage=277,
-        battery_current=278,
-        battery_power=279,
-        battery_soc=280,
-        battery_temperature=281,
-        pv_total_power=302,
-        pv_charging_power=303,
-        pv_charging_current=304,
-        pv_temperature=305,
-        pv1_voltage=351,
-        pv1_current=352,
-        pv1_power=353,
-        pv2_voltage=389,
-        pv2_current=390,
-        pv2_power=391,
-        grid_voltage=338,
-        grid_current=339,
-        grid_power=340,
-        grid_frequency=607,
-        output_voltage=346,
-        output_current=347,
-        output_power=348,
-        output_apparent_power=349,
-        output_load_percentage=350,
-        output_frequency=607,
-        time_registers=696,
-        pv_energy_today=702,
-        pv_energy_total=703
-    ),
-    "ISOLAR_SMG_II_6K": RegisterMap(
-        operation_mode=201,
-        battery_voltage=215,
-        battery_current=216,
-        battery_power=217,
-        battery_soc=229,
-        battery_temperature=226,  # Using DCDC temperature as equivalent
-        pv_total_power=223,
-        pv_charging_power=224,
-        pv_charging_current=234,
-        pv_temperature=227,  # Using inverter temperature as equivalent
-        pv1_voltage=219,
-        pv1_current=220,
-        pv1_power=223,
-        pv2_voltage=0,  # This model might not support PV2
-        pv2_current=0,
-        pv2_power=0,
-        grid_voltage=202,
-        grid_current=0,  # Not available in this model
-        grid_power=204,
-        grid_frequency=203,
-        output_voltage=210,
-        output_current=211,
-        output_power=213,
-        output_apparent_power=214,
-        output_load_percentage=225,
-        output_frequency=212,
-        time_registers=0,  # This model might not support time registers
-        pv_energy_today=0,  # This model might not support energy tracking
-        pv_energy_total=0
-    )
+@dataclass
+class ModelConfig:
+    """Complete configuration for an inverter model."""
+    name: str
+    register_map: Dict[str, RegisterConfig] = field(default_factory=dict)
+    
+    # Helper method to get a register address
+    def get_address(self, register_name: str) -> Optional[int]:
+        config = self.register_map.get(register_name)
+        return config.address if config else None
+    
+    # Helper method to get a register's scale factor
+    def get_scale_factor(self, register_name: str) -> float:
+        config = self.register_map.get(register_name)
+        return config.scale_factor if config else 1.0
+    
+    # Helper method to process a register value
+    def process_value(self, register_name: str, value: int) -> Any:
+        config = self.register_map.get(register_name)
+        if not config:
+            return value
+        
+        # Apply custom processor if available
+        if config.processor:
+            return config.processor(value)
+        
+        # Otherwise apply scale factor
+        return value * config.scale_factor
+
+# Define model configurations
+ISOLAR_SMG_II_11K = ModelConfig(
+    name="ISOLAR_SMG_II_11K",
+    register_map={
+        "operation_mode": RegisterConfig(201),
+        "battery_voltage": RegisterConfig(277, 0.1),
+        "battery_current": RegisterConfig(278, 0.1),
+        "battery_power": RegisterConfig(279),
+        "battery_soc": RegisterConfig(280),
+        "battery_temperature": RegisterConfig(281),
+        "pv_total_power": RegisterConfig(302),
+        "pv_charging_power": RegisterConfig(303),
+        "pv_charging_current": RegisterConfig(304, 0.1),
+        "pv_temperature": RegisterConfig(305),
+        "pv1_voltage": RegisterConfig(351, 0.1),
+        "pv1_current": RegisterConfig(352, 0.1),
+        "pv1_power": RegisterConfig(353),
+        "pv2_voltage": RegisterConfig(389, 0.1),
+        "pv2_current": RegisterConfig(390, 0.1),
+        "pv2_power": RegisterConfig(391),
+        "grid_voltage": RegisterConfig(338, 0.1),
+        "grid_current": RegisterConfig(339, 0.1),
+        "grid_power": RegisterConfig(340),
+        "grid_frequency": RegisterConfig(607),
+        "output_voltage": RegisterConfig(346, 0.1),
+        "output_current": RegisterConfig(347, 0.1),
+        "output_power": RegisterConfig(348),
+        "output_apparent_power": RegisterConfig(349),
+        "output_load_percentage": RegisterConfig(350),
+        "output_frequency": RegisterConfig(607),
+        "time_registers": RegisterConfig(696),
+        "pv_energy_today": RegisterConfig(702, 0.01),
+        "pv_energy_total": RegisterConfig(703, 0.01),
+    }
+)
+
+ISOLAR_SMG_II_6K = ModelConfig(
+    name="ISOLAR_SMG_II_6K",
+    register_map={
+        "operation_mode": RegisterConfig(201),
+        "battery_voltage": RegisterConfig(215, 0.1),
+        "battery_current": RegisterConfig(216, 0.1),
+        "battery_power": RegisterConfig(217),
+        "battery_soc": RegisterConfig(229, 0.01),
+        "battery_temperature": RegisterConfig(226),  # Using DCDC temperature
+        "pv_total_power": RegisterConfig(223),
+        "pv_charging_power": RegisterConfig(224),
+        "pv_charging_current": RegisterConfig(234, 0.1),
+        "pv_temperature": RegisterConfig(227),  # Using inverter temperature
+        "pv1_voltage": RegisterConfig(219, 0.1),
+        "pv1_current": RegisterConfig(220, 0.1),
+        "pv1_power": RegisterConfig(223),
+        "pv2_voltage": RegisterConfig(0),  # Not supported
+        "pv2_current": RegisterConfig(0),  # Not supported
+        "pv2_power": RegisterConfig(0),    # Not supported
+        "grid_voltage": RegisterConfig(202, 0.1),
+        "grid_current": RegisterConfig(0),  # Not available
+        "grid_power": RegisterConfig(204),
+        "grid_frequency": RegisterConfig(203),
+        "output_voltage": RegisterConfig(210, 0.1),
+        "output_current": RegisterConfig(211, 0.1),
+        "output_power": RegisterConfig(213),
+        "output_apparent_power": RegisterConfig(214),
+        "output_load_percentage": RegisterConfig(225, 0.01),
+        "output_frequency": RegisterConfig(212),
+        "time_registers": RegisterConfig(0),  # Not supported
+        "pv_energy_today": RegisterConfig(0),  # Not supported
+        "pv_energy_total": RegisterConfig(0),  # Not supported
+    }
+)
+
+# Dictionary of all supported models
+MODEL_CONFIGS = {
+    "ISOLAR_SMG_II_11K": ISOLAR_SMG_II_11K,
+    "ISOLAR_SMG_II_6K": ISOLAR_SMG_II_6K,
 }
