@@ -1,0 +1,66 @@
+# Template sensor for battery discharge
+template:
+  - sensor:
+      - name: "Easun Battery Discharge"
+        device_class: power
+        unit_of_measurement: "W"
+        state: >
+          {% if states('sensor.easun_battery_power') | float(0) < 0 %}
+            {{ (states('sensor.easun_battery_power') | float(0)) * -1 }}
+          {% else %}
+            0
+          {% endif %}
+
+# Integration sensors (to integrate power values over time)
+sensor:
+  - platform: integration
+    name: "Easun Battery Charge Daily"
+    source: sensor.easun_battery_charge_power
+    unit_time: h
+    method: left
+  - platform: integration
+    name: "Easun Battery Discharge Daily"
+    source: sensor.easun_battery_discharge
+    unit_time: h
+    method: left
+  - platform: integration
+    name: "Energy Consumed Accumulator"
+    source: sensor.easun_output_power
+    unit_time: h
+    method: left
+  - platform: integration
+    name: "Grid Energy Consumed Accumulator"
+    source: sensor.easun_grid_power
+    unit_time: h
+    method: left
+
+# Utility meter sensors (for daily consumption totals)
+utility_meter:
+  easun_battery_discharge_daily:
+    source: sensor.easun_battery_discharge_accumulator
+    cycle: daily
+    offset: 0
+    net_consumption: false
+    delta_values: false
+    periodically_resetting: true
+  easun_battery_charge_daily:
+    source: sensor.easun_battery_charge_accumulator
+    cycle: daily
+    offset: 0
+    net_consumption: false
+    delta_values: false
+    periodically_resetting: true
+  energy_consumed_daily:
+    source: sensor.energy_consumed_accumulator
+    cycle: daily
+    offset: 0
+    net_consumption: false
+    delta_values: false
+    periodically_resetting: true
+  easun_grid_energy_daily:
+    source: sensor.grid_energy_consumed_accumulator
+    cycle: daily
+    offset: 0
+    net_consumption: false
+    delta_values: false
+    periodically_resetting: true
