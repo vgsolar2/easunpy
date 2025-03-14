@@ -10,7 +10,7 @@ import logging
 from . import DOMAIN
 from easunpy.discover import discover_device
 from easunpy.utils import get_local_ip
-from easunpy.models import REGISTER_MAPS
+from easunpy.models import MODEL_CONFIGS
 
 DEFAULT_SCAN_INTERVAL = 30  # Default to 30 seconds
 _LOGGER = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Coerce(int),
                     vol.Range(min=1, max=3600)
                 ),
-                vol.Required("model", default="ISOLAR_SMG_II_11K"): vol.In(list(REGISTER_MAPS.keys())),
+                vol.Required("model", default="ISOLAR_SMG_II_11K"): vol.In(list(MODEL_CONFIGS.keys())),
             }),
             errors=errors
         )
@@ -130,7 +130,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required(
                     "model",
                     default=self.config_entry.data.get("model", "ISOLAR_SMG_II_11K")
-                ): vol.In(list(REGISTER_MAPS.keys())),
+                ): vol.In(list(MODEL_CONFIGS.keys())),
                 vol.Optional(
                     "scan_interval",
                     default=self.config_entry.options.get(
