@@ -37,7 +37,7 @@ class DataCollector:
         self._last_update_start = None
         self._last_successful_update = None
         self._update_timeout = 30
-        _LOGGER.info(f"DataCollector initialized with model: {self._isolar.register_map}")
+        _LOGGER.info(f"DataCollector initialized with model: {self._isolar.model}")
 
     async def is_update_stuck(self) -> bool:
         """Check if the update process is stuck."""
@@ -75,7 +75,7 @@ class DataCollector:
     async def _do_update(self):
         """Actual update implementation."""
         try:
-            _LOGGER.debug(f"Starting data update using model: {self._isolar.register_map}")
+            _LOGGER.debug(f"Starting data update using model: {self._isolar.model}")
             battery, pv, grid, output, status = await self._isolar.get_all_data()
             if all(x is None for x in (battery, pv, grid, output, status)):
                 raise Exception("No data received from inverter")
