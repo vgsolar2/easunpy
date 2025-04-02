@@ -117,7 +117,12 @@ ISOLAR_SMG_II_11K = ModelConfig(
         "output_apparent_power": RegisterConfig(349),
         "output_load_percentage": RegisterConfig(350),
         "output_frequency": RegisterConfig(607),
-        "time_registers": RegisterConfig(696),
+        "time_register_0": RegisterConfig(696, processor=int),  # Year
+        "time_register_1": RegisterConfig(697, processor=int),  # Month
+        "time_register_2": RegisterConfig(698, processor=int),  # Day
+        "time_register_3": RegisterConfig(699, processor=int),  # Hour
+        "time_register_4": RegisterConfig(700, processor=int),  # Minute
+        "time_register_5": RegisterConfig(701, processor=int),  # Second
         "pv_energy_today": RegisterConfig(702, 0.01),
         "pv_energy_total": RegisterConfig(703, 0.01),
     }
@@ -152,7 +157,12 @@ ISOLAR_SMG_II_6K = ModelConfig(
         "output_apparent_power": RegisterConfig(214),
         "output_load_percentage": RegisterConfig(225, 0.01),
         "output_frequency": RegisterConfig(212),
-        "time_registers": RegisterConfig(0),  # Not supported
+        "time_register_0": RegisterConfig(696, processor=int),  # Year
+        "time_register_1": RegisterConfig(697, processor=int),  # Month
+        "time_register_2": RegisterConfig(698, processor=int),  # Day
+        "time_register_3": RegisterConfig(699, processor=int),  # Hour
+        "time_register_4": RegisterConfig(700, processor=int),  # Minute
+        "time_register_5": RegisterConfig(701, processor=int),  # Second
         "pv_energy_today": RegisterConfig(0),  # Not supported
         "pv_energy_total": RegisterConfig(0),  # Not supported
     }
