@@ -221,7 +221,18 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     _LOGGER.debug("Unloading Easun ISolar Inverter config entry")
     
+    # Cleanup any update listeners
+    if entry.entry_id in hass.data[DOMAIN]:
+        if "update_listener" in hass.data[DOMAIN][entry.entry_id]:
+            _LOGGER.debug("Cancelling update listener")
+            hass.data[DOMAIN][entry.entry_id]["update_listener"]()
+    
     # Unload the sensor platform
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    
+    # Clean up domain data
+    if unload_ok and entry.entry_id in hass.data[DOMAIN]:
+        _LOGGER.debug("Removing entry data")
+        hass.data[DOMAIN].pop(entry.entry_id)
     
     return unload_ok 

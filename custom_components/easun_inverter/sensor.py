@@ -37,7 +37,13 @@ class DataCollector:
         self._last_update_start = None
         self._last_successful_update = None
         self._update_timeout = 30
+        self._sensors = []
         _LOGGER.info(f"DataCollector initialized with model: {self._isolar.model}")
+
+    def register_sensor(self, sensor):
+        """Register a sensor to be updated when data is refreshed."""
+        self._sensors.append(sensor)
+        _LOGGER.debug(f"Registered sensor: {sensor.name}")
 
     async def is_update_stuck(self) -> bool:
         """Check if the update process is stuck."""
@@ -60,6 +66,10 @@ class DataCollector:
             # Wait for the task with timeout
             try:
                 await asyncio.wait_for(update_task, timeout=self._update_timeout)
+                # Update all registered sensors after successful data fetch
+                for sensor in self._sensors:
+                    sensor.update_from_collector()
+                _LOGGER.debug("Updated all registered sensors")
             except asyncio.TimeoutError:
                 _LOGGER.error("Update timed out, cancelling task")
                 update_task.cancel()
@@ -125,9 +135,11 @@ class EasunSensor(SensorEntity):
         self._value_converter = value_converter
         self._available = True
         self._force_update = True  # Force update even if value hasn't changed
+        # Register this sensor with the data collector
+        self._data_collector.register_sensor(self)
 
-    def update(self) -> None:
-        """Fetch new state data for the sensor."""
+    def update_from_collector(self) -> None:
+        """Update sensor state from data collector."""
         try:
             data = self._data_collector.get_data(self._data_type)
             if data:
@@ -146,6 +158,13 @@ class EasunSensor(SensorEntity):
         except Exception as e:
             _LOGGER.error(f"Error updating sensor {self._name}: {str(e)}")
             self._available = False
+        
+        # Trigger state update in Home Assistant
+        self.async_write_ha_state()
+
+    def update(self) -> None:
+        """No-op update method as sensors are updated by the data collector."""
+        pass
 
     @property
     def force_update(self) -> bool:
@@ -170,8 +189,8 @@ class EasunSensor(SensorEntity):
 
     @property
     def should_poll(self) -> bool:
-        """Return True as entity should be polled."""
-        return True
+        """Return False as entity should not be polled individually."""
+        return False
 
     @property
     def name(self):
@@ -331,49 +350,11 @@ async def async_setup_entry(
     data_collector = DataCollector(isolar)
     
     # Store the coordinator in the domain data under this entry's ID
+    hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault(config_entry.entry_id, {})
     hass.data[DOMAIN][config_entry.entry_id]["coordinator"] = data_collector
     
-    # Schedule periodic updates
-    is_updating = False
-
-    async def update_data_collector(now):
-        """Update data collector."""
-        nonlocal is_updating
-        
-        if is_updating:
-            if await data_collector.is_update_stuck():
-                _LOGGER.warning("Previous update appears to be stuck, forcing a new update")
-                is_updating = False
-            else:
-                _LOGGER.debug("Update already in progress, skipping this cycle")
-                return
-
-        _LOGGER.debug("Starting data collector update")
-        is_updating = True
-        data_collector._last_update_start = datetime.now()
-        
-        try:
-            # Use wait_for here as well for extra safety
-            await asyncio.wait_for(
-                data_collector.update_data(),
-                timeout=data_collector._update_timeout + 5  # Add a small buffer
-            )
-        except asyncio.TimeoutError:
-            _LOGGER.error("Update operation timed out at scheduler level")
-        except Exception as e:
-            _LOGGER.error(f"Error updating data collector: {str(e)}")
-        finally:
-            is_updating = False
-            data_collector._last_update_start = None
-            _LOGGER.debug("Data collector update finished")
-
-    async_track_time_interval(
-        hass, 
-        update_data_collector, 
-        timedelta(seconds=scan_interval)
-    )
-
+    # Create entities
     def frequency_converter(value):
         """Convert frequency from centihz to hz."""
         return value / 100 if value is not None else None
@@ -410,6 +391,57 @@ async def async_setup_entry(
         DeviceScanSensor(hass),
     ]
     
-    add_entities(entities, True)
+    add_entities(entities, False)  # Set update_before_add to False since we're managing updates separately
+    
+    # Schedule periodic updates
+    is_updating = False
+
+    async def update_data_collector(now):
+        """Update data collector."""
+        nonlocal is_updating
+        
+        if is_updating:
+            if await data_collector.is_update_stuck():
+                _LOGGER.warning("Previous update appears to be stuck, forcing a new update")
+                is_updating = False
+            else:
+                _LOGGER.debug("Update already in progress, skipping this cycle")
+                return
+
+        _LOGGER.debug("Starting data collector update")
+        is_updating = True
+        data_collector._last_update_start = datetime.now()
+        
+        try:
+            # Use wait_for here as well for extra safety
+            await asyncio.wait_for(
+                data_collector.update_data(),
+                timeout=data_collector._update_timeout + 5  # Add a small buffer
+            )
+        except asyncio.TimeoutError:
+            _LOGGER.error("Update operation timed out at scheduler level")
+        except Exception as e:
+            _LOGGER.error(f"Error updating data collector: {str(e)}")
+        finally:
+            is_updating = False
+            data_collector._last_update_start = None
+            _LOGGER.debug("Data collector update finished")
+
+    # Store the update function in the domain data
+    hass.data[DOMAIN][config_entry.entry_id]["update_function"] = update_data_collector
+    hass.data[DOMAIN][config_entry.entry_id]["scan_interval"] = scan_interval
+    
+    # Create the update listener and store it in the domain data
+    update_listener = async_track_time_interval(
+        hass, 
+        update_data_collector, 
+        timedelta(seconds=scan_interval)
+    )
+    hass.data[DOMAIN][config_entry.entry_id]["update_listener"] = update_listener
+    
+    # Register config entry unload function to clean up resources
+    config_entry.async_on_unload(
+        lambda: hass.data[DOMAIN][config_entry.entry_id]["update_listener"]()
+    )
     
     _LOGGER.debug("Easun Inverter sensors added")

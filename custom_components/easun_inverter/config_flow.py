@@ -6,6 +6,8 @@ from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.core import callback
 import logging
+from homeassistant.helpers.event import async_track_time_interval
+from datetime import timedelta
 
 from . import DOMAIN
 from easunpy.discover import discover_device
@@ -37,7 +39,7 @@ class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             scan_interval = user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL)
             model = user_input.get("model")  # Get model from input
             
-            _LOGGER.warning(f"Processing user input with model: {model}")
+            _LOGGER.debug(f"Processing user input with model: {model}")
             
             if not inverter_ip or not local_ip:
                 errors["base"] = "missing_ip"
@@ -48,7 +50,7 @@ class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "scan_interval": scan_interval,
                     "model": model,
                 }
-                _LOGGER.warning(f"Creating entry with data: {entry_data}")
+                _LOGGER.debug(f"Creating entry with data: {entry_data}")
                 return self.async_create_entry(
                     title=f"Easun Inverter ({inverter_ip})",
                     data=entry_data,
@@ -86,17 +88,38 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
-            _LOGGER.warning(f"Updating config entry with new input: {user_input}")
+            _LOGGER.debug(f"Updating config entry with new input: {user_input}")
             
-            # Get the coordinator
-            entry_data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
-            if entry_data and "coordinator" in entry_data:
-                coordinator = entry_data["coordinator"]
-                # Update the model if it changed
+            # Get the entry data
+            entry_data = self.hass.data[DOMAIN].get(self.config_entry.entry_id, {})
+            coordinator = entry_data.get("coordinator")
+            
+            # Check if coordinator exists
+            if coordinator:
+                # Check if model has changed
                 if user_input["model"] != self.config_entry.data.get("model"):
                     await coordinator.update_model(user_input["model"])
+                
+                # Update scan interval without reloading
+                if "update_listener" in entry_data:
+                    entry_data["update_listener"]()
+                    entry_data.pop("update_listener")
+                
+                # Set up new scan interval
+                new_interval = user_input["scan_interval"]
+                
+                # Create new update listener with new interval
+                update_listener = async_track_time_interval(
+                    self.hass,
+                    entry_data.get("update_function"),
+                    timedelta(seconds=new_interval)
+                )
+                entry_data["update_listener"] = update_listener
+                entry_data["scan_interval"] = new_interval
+                
+                _LOGGER.debug(f"Updated scan interval to {new_interval} seconds")
             
-            # Update the config entry with new options
+            # Update the config entry with new data
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
                 data={
@@ -109,11 +132,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "scan_interval": user_input["scan_interval"],
                 }
             )
-            _LOGGER.warning(f"Updated config entry data: {self.config_entry.data}")
-            # Reload the config entry to apply changes
-            self.hass.async_create_task(
-                self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            )
+            _LOGGER.debug(f"Updated config entry data: {self.config_entry.data}")
+            
+            # Only reload if IP or model changed (scan interval handled separately)
+            if (user_input["inverter_ip"] != self.config_entry.data.get("inverter_ip") or
+                user_input["local_ip"] != self.config_entry.data.get("local_ip")):
+                _LOGGER.debug("IP address changed, reloading integration")
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                )
+            
             return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(
