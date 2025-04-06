@@ -5,6 +5,7 @@ INTERVAL=5
 INVERTER_IP=""
 LOCAL_IP=""
 CONTINUOUS=true
+MODEL=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -24,6 +25,11 @@ while [[ $# -gt 0 ]]; do
             shift
             shift
             ;;
+        --model)
+            MODEL="$2"
+            shift
+            shift
+            ;;
         --single)
             CONTINUOUS=false
             shift
@@ -36,6 +42,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --local-ip IP    Set local IP manually (optional)"
             echo "  --single         Run once instead of continuously"
             echo "  --help           Show this help message"
+            echo "  --model MODEL    Set inverter model manually (optional)"
             exit 0
             ;;
         *)
@@ -54,6 +61,9 @@ fi
 if [ -n "$LOCAL_IP" ]; then
     echo "Local IP: $LOCAL_IP"
 fi
+if [ -n "$MODEL" ]; then
+    echo "Model: $MODEL"
+fi
 if [ "$CONTINUOUS" = true ]; then
     echo "Mode: Continuous monitoring"
 else
@@ -67,6 +77,9 @@ if [ -n "$INVERTER_IP" ]; then
 fi
 if [ -n "$LOCAL_IP" ]; then
     CMD="$CMD --local-ip $LOCAL_IP"
+fi
+if [ -n "$MODEL" ]; then
+    CMD="$CMD --model $MODEL"
 fi
 if [ "$CONTINUOUS" = true ]; then
     CMD="$CMD --continuous"
