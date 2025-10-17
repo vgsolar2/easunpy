@@ -123,7 +123,7 @@ class DataCollector:
 class EasunSensor(SensorEntity):
     """Representation of an Easun Inverter sensor."""
 
-    def __init__(self, data_collector, id, name, unit, data_type, data_attr, value_converter=None):
+    def __init__(self, data_collector, id, name, unit, data_type, data_attr, value_converter=None, entry_id=None):
         """Initialize the sensor."""
         self._data_collector = data_collector
         self._id = id
@@ -135,6 +135,7 @@ class EasunSensor(SensorEntity):
         self._value_converter = value_converter
         self._available = True
         self._force_update = True  # Force update even if value hasn't changed
+        self._entry_id = entry_id
         # Register this sensor with the data collector
         self._data_collector.register_sensor(self)
 
@@ -195,11 +196,15 @@ class EasunSensor(SensorEntity):
     @property
     def name(self):
         """Return the name of the sensor."""
+        if self._entry_id:
+            return f"Easun {self._name} ({self._entry_id[:8]})"
         return f"Easun {self._name}"
 
     @property
     def unique_id(self):
         """Return a unique ID."""
+        if self._entry_id:
+            return f"easun_inverter_{self._entry_id}_{self._id}"
         return f"easun_inverter_{self._id}"
 
     @property
@@ -212,116 +217,6 @@ class EasunSensor(SensorEntity):
         """Return the unit of measurement."""
         return self._unit
 
-class RegisterScanSensor(SensorEntity):
-    """Sensor that shows register scan results."""
-
-    def __init__(self, hass):
-        """Initialize the sensor."""
-        self._hass = hass
-        self._attr_name = "Easun Register Scan"
-        self._attr_unique_id = "easun_register_scan"
-        self._attr_native_value = "No scan performed"
-        self._attr_icon = "mdi:magnify"
-
-    @property
-    def extra_state_attributes(self):
-        """Return the state attributes."""
-        if DOMAIN in self._hass.data and "last_scan" in self._hass.data[DOMAIN]:
-            scan_data = self._hass.data[DOMAIN]["last_scan"]
-            
-            # Format the results for better display
-            formatted_results = {}
-            non_zero_count = 0
-            for r in scan_data["results"]:
-                formatted_results[r["hex"]] = {
-                    "register_dec": r["register"],
-                    "value": r["value"],
-                    "raw": r["raw"]
-                }
-                if r["value"] != 0:
-                    non_zero_count += 1
-            
-            return {
-                "timestamp": scan_data["timestamp"],
-                "scanned_range": f"{scan_data['start_register']} to {scan_data['start_register'] + scan_data['count']}",
-                "total_registers": len(scan_data["results"]),
-                "non_zero_registers": non_zero_count,
-                "results": formatted_results,
-                "common_registers": {
-                    "0x0115": "Battery data",
-                    "0x012E": "PV data",
-                    "0x015F": "Grid data",
-                    "0x0185": "Output data"
-                }
-            }
-        return {}
-
-    def update(self):
-        """Update the sensor."""
-        if DOMAIN in self._hass.data and "last_scan" in self._hass.data[DOMAIN]:
-            scan_data = self._hass.data[DOMAIN]["last_scan"]
-            total = len(scan_data["results"])
-            non_zero = sum(1 for r in scan_data["results"] if r["value"] != 0)
-            self._attr_native_value = f"Found {total} registers ({non_zero} non-zero)"
-
-class DeviceScanSensor(SensorEntity):
-    """Sensor that shows device scan results."""
-
-    def __init__(self, hass):
-        """Initialize the sensor."""
-        self._hass = hass
-        self._attr_name = "Easun Device Scan"
-        self._attr_unique_id = "easun_device_scan"
-        self._attr_native_value = "No scan performed"
-        self._attr_icon = "mdi:magnify-scan"
-
-    @property
-    def extra_state_attributes(self):
-        """Return the state attributes."""
-        if DOMAIN in self._hass.data and "device_scan" in self._hass.data[DOMAIN]:
-            scan_data = self._hass.data[DOMAIN]["device_scan"]
-            
-            # Count different response types
-            response_counts = {
-                "Valid Response": 0,
-                "Protocol Error": 0,
-                "No Response": 0,
-                "Invalid Response": 0,
-                "Error": 0
-            }
-            
-            for r in scan_data["results"]:
-                status = r["status"]
-                if status.startswith("Invalid Response"):
-                    response_counts["Invalid Response"] += 1
-                elif status.startswith("Error"):
-                    response_counts["Error"] += 1
-                else:
-                    response_counts[status] += 1
-            
-            return {
-                "timestamp": scan_data["timestamp"],
-                "scanned_range": f"0x{scan_data['start_id']:02x} to 0x{scan_data['end_id']:02x}",
-                "response_summary": response_counts,
-                "results": {
-                    r["hex"]: {
-                        "device_id": r["device_id"],
-                        "status": r["status"],
-                        "request": r["request"],
-                        "response": r["response"],
-                        "decoded": r.get("decoded")
-                    } for r in scan_data["results"] if r["status"] == "Valid Response"
-                }
-            }
-        return {}
-
-    def update(self):
-        """Update the sensor."""
-        if DOMAIN in self._hass.data and "device_scan" in self._hass.data[DOMAIN]:
-            scan_data = self._hass.data[DOMAIN]["device_scan"]
-            valid_responses = sum(1 for r in scan_data["results"] if r["status"] == "Valid Response")
-            total = len(scan_data["results"])
-            self._attr_native_value = f"Found {valid_responses} valid responses out of {total} devices"
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -360,35 +255,33 @@ async def async_setup_entry(
         return value / 100 if value is not None else None
 
     entities = [
-        EasunSensor(data_collector, "battery_voltage", "Battery Voltage", UnitOfElectricPotential.VOLT, "battery", "voltage"),
-        EasunSensor(data_collector, "battery_current", "Battery Current", UnitOfElectricCurrent.AMPERE, "battery", "current"),
-        EasunSensor(data_collector, "battery_power", "Battery Power", UnitOfPower.WATT, "battery", "power"),
-        EasunSensor(data_collector, "battery_soc", "Battery State of Charge", PERCENTAGE, "battery", "soc"),
-        EasunSensor(data_collector, "battery_temperature", "Battery Temperature", UnitOfTemperature.CELSIUS, "battery", "temperature"),
-        EasunSensor(data_collector, "pv_total_power", "PV Total Power", UnitOfPower.WATT, "pv", "total_power"),
-        EasunSensor(data_collector, "pv_charging_power", "PV Charging Power", UnitOfPower.WATT, "pv", "charging_power"),
-        EasunSensor(data_collector, "pv_charging_current", "PV Charging Current", UnitOfElectricCurrent.AMPERE, "pv", "charging_current"),
-        EasunSensor(data_collector, "pv1_voltage", "PV1 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv1_voltage"),
-        EasunSensor(data_collector, "pv1_current", "PV1 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv1_current"),
-        EasunSensor(data_collector, "pv1_power", "PV1 Power", UnitOfPower.WATT, "pv", "pv1_power"),
-        EasunSensor(data_collector, "pv2_voltage", "PV2 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv2_voltage"),
-        EasunSensor(data_collector, "pv2_current", "PV2 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv2_current"),
-        EasunSensor(data_collector, "pv2_power", "PV2 Power", UnitOfPower.WATT, "pv", "pv2_power"),
-        EasunSensor(data_collector, "pv_generated_today", "PV Generated Today", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_today"),
-        EasunSensor(data_collector, "pv_generated_total", "PV Generated Total", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_total"),
-        EasunSensor(data_collector, "grid_voltage", "Grid Voltage", UnitOfElectricPotential.VOLT, "grid", "voltage"),
-        EasunSensor(data_collector, "grid_power", "Grid Power", UnitOfPower.WATT, "grid", "power"),
-        EasunSensor(data_collector, "grid_frequency", "Grid Frequency", UnitOfFrequency.HERTZ, "grid", "frequency", frequency_converter),
-        EasunSensor(data_collector, "output_voltage", "Output Voltage", UnitOfElectricPotential.VOLT, "output", "voltage"),
-        EasunSensor(data_collector, "output_current", "Output Current", UnitOfElectricCurrent.AMPERE, "output", "current"),
-        EasunSensor(data_collector, "output_power", "Output Power", UnitOfPower.WATT, "output", "power"),
-        EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfApparentPower.VOLT_AMPERE, "output", "apparent_power"),
-        EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage"),
-        EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency", frequency_converter),
-        EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name"),
-        EasunSensor(data_collector, "inverter_time", "Inverter Time", None, "system", "inverter_time"),
-        RegisterScanSensor(hass),
-        DeviceScanSensor(hass),
+        EasunSensor(data_collector, "battery_voltage", "Battery Voltage", UnitOfElectricPotential.VOLT, "battery", "voltage", None, config_entry.entry_id),
+        EasunSensor(data_collector, "battery_current", "Battery Current", UnitOfElectricCurrent.AMPERE, "battery", "current", None, config_entry.entry_id),
+        EasunSensor(data_collector, "battery_power", "Battery Power", UnitOfPower.WATT, "battery", "power", None, config_entry.entry_id),
+        EasunSensor(data_collector, "battery_soc", "Battery State of Charge", PERCENTAGE, "battery", "soc", None, config_entry.entry_id),
+        EasunSensor(data_collector, "battery_temperature", "Battery Temperature", UnitOfTemperature.CELSIUS, "battery", "temperature", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv_total_power", "PV Total Power", UnitOfPower.WATT, "pv", "total_power", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv_charging_power", "PV Charging Power", UnitOfPower.WATT, "pv", "charging_power", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv_charging_current", "PV Charging Current", UnitOfElectricCurrent.AMPERE, "pv", "charging_current", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv1_voltage", "PV1 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv1_voltage", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv1_current", "PV1 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv1_current", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv1_power", "PV1 Power", UnitOfPower.WATT, "pv", "pv1_power", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv2_voltage", "PV2 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv2_voltage", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv2_current", "PV2 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv2_current", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv2_power", "PV2 Power", UnitOfPower.WATT, "pv", "pv2_power", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv_generated_today", "PV Generated Today", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_today", None, config_entry.entry_id),
+        EasunSensor(data_collector, "pv_generated_total", "PV Generated Total", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_total", None, config_entry.entry_id),
+        EasunSensor(data_collector, "grid_voltage", "Grid Voltage", UnitOfElectricPotential.VOLT, "grid", "voltage", None, config_entry.entry_id),
+        EasunSensor(data_collector, "grid_power", "Grid Power", UnitOfPower.WATT, "grid", "power", None, config_entry.entry_id),
+        EasunSensor(data_collector, "grid_frequency", "Grid Frequency", UnitOfFrequency.HERTZ, "grid", "frequency", frequency_converter, config_entry.entry_id),
+        EasunSensor(data_collector, "output_voltage", "Output Voltage", UnitOfElectricPotential.VOLT, "output", "voltage", None, config_entry.entry_id),
+        EasunSensor(data_collector, "output_current", "Output Current", UnitOfElectricCurrent.AMPERE, "output", "current", None, config_entry.entry_id),
+        EasunSensor(data_collector, "output_power", "Output Power", UnitOfPower.WATT, "output", "power", None, config_entry.entry_id),
+        EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfApparentPower.VOLT_AMPERE, "output", "apparent_power", None, config_entry.entry_id),
+        EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage", None, config_entry.entry_id),
+        EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency", frequency_converter, config_entry.entry_id),
+        EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name", None, config_entry.entry_id),
+        EasunSensor(data_collector, "inverter_time", "Inverter Time", None, "system", "inverter_time", None, config_entry.entry_id),
     ]
     
     add_entities(entities, False)  # Set update_before_add to False since we're managing updates separately
