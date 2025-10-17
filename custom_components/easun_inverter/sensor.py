@@ -123,7 +123,7 @@ class DataCollector:
 class EasunSensor(SensorEntity):
     """Representation of an Easun Inverter sensor."""
 
-    def __init__(self, data_collector, id, name, unit, data_type, data_attr, value_converter=None, entry_id=None):
+    def __init__(self, data_collector, id, name, unit, data_type, data_attr, value_converter=None, device_id=None):
         """Initialize the sensor."""
         self._data_collector = data_collector
         self._id = id
@@ -135,7 +135,7 @@ class EasunSensor(SensorEntity):
         self._value_converter = value_converter
         self._available = True
         self._force_update = True  # Force update even if value hasn't changed
-        self._entry_id = entry_id
+        self._device_id = device_id
         # Register this sensor with the data collector
         self._data_collector.register_sensor(self)
 
@@ -196,15 +196,13 @@ class EasunSensor(SensorEntity):
     @property
     def name(self):
         """Return the name of the sensor."""
-        if self._entry_id:
-            return f"Easun {self._name} ({self._entry_id[:8]})"
-        return f"Easun {self._name}"
+        return self._name
 
     @property
     def unique_id(self):
         """Return a unique ID."""
-        if self._entry_id:
-            return f"easun_inverter_{self._entry_id}_{self._id}"
+        if self._device_id:
+            return f"{self._device_id}_{self._id}"
         return f"easun_inverter_{self._id}"
 
     @property
@@ -216,6 +214,18 @@ class EasunSensor(SensorEntity):
     def unit_of_measurement(self):
         """Return the unit of measurement."""
         return self._unit
+
+    @property
+    def device_info(self):
+        """Return device information."""
+        if self._device_id:
+            return {
+                "identifiers": {(DOMAIN, self._device_id)},
+                "name": f"Easun Inverter ({self._device_id})",
+                "manufacturer": "Easun",
+                "model": "ISolar Inverter",
+            }
+        return None
 
 
 async def async_setup_entry(
@@ -254,34 +264,37 @@ async def async_setup_entry(
         """Convert frequency from centihz to hz."""
         return value / 100 if value is not None else None
 
+    # Get device ID from config entry (use custom_name as device_id)
+    device_id = config_entry.data.get("custom_name")
+    
     entities = [
-        EasunSensor(data_collector, "battery_voltage", "Battery Voltage", UnitOfElectricPotential.VOLT, "battery", "voltage", None, config_entry.entry_id),
-        EasunSensor(data_collector, "battery_current", "Battery Current", UnitOfElectricCurrent.AMPERE, "battery", "current", None, config_entry.entry_id),
-        EasunSensor(data_collector, "battery_power", "Battery Power", UnitOfPower.WATT, "battery", "power", None, config_entry.entry_id),
-        EasunSensor(data_collector, "battery_soc", "Battery State of Charge", PERCENTAGE, "battery", "soc", None, config_entry.entry_id),
-        EasunSensor(data_collector, "battery_temperature", "Battery Temperature", UnitOfTemperature.CELSIUS, "battery", "temperature", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv_total_power", "PV Total Power", UnitOfPower.WATT, "pv", "total_power", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv_charging_power", "PV Charging Power", UnitOfPower.WATT, "pv", "charging_power", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv_charging_current", "PV Charging Current", UnitOfElectricCurrent.AMPERE, "pv", "charging_current", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv1_voltage", "PV1 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv1_voltage", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv1_current", "PV1 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv1_current", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv1_power", "PV1 Power", UnitOfPower.WATT, "pv", "pv1_power", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv2_voltage", "PV2 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv2_voltage", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv2_current", "PV2 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv2_current", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv2_power", "PV2 Power", UnitOfPower.WATT, "pv", "pv2_power", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv_generated_today", "PV Generated Today", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_today", None, config_entry.entry_id),
-        EasunSensor(data_collector, "pv_generated_total", "PV Generated Total", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_total", None, config_entry.entry_id),
-        EasunSensor(data_collector, "grid_voltage", "Grid Voltage", UnitOfElectricPotential.VOLT, "grid", "voltage", None, config_entry.entry_id),
-        EasunSensor(data_collector, "grid_power", "Grid Power", UnitOfPower.WATT, "grid", "power", None, config_entry.entry_id),
-        EasunSensor(data_collector, "grid_frequency", "Grid Frequency", UnitOfFrequency.HERTZ, "grid", "frequency", frequency_converter, config_entry.entry_id),
-        EasunSensor(data_collector, "output_voltage", "Output Voltage", UnitOfElectricPotential.VOLT, "output", "voltage", None, config_entry.entry_id),
-        EasunSensor(data_collector, "output_current", "Output Current", UnitOfElectricCurrent.AMPERE, "output", "current", None, config_entry.entry_id),
-        EasunSensor(data_collector, "output_power", "Output Power", UnitOfPower.WATT, "output", "power", None, config_entry.entry_id),
-        EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfApparentPower.VOLT_AMPERE, "output", "apparent_power", None, config_entry.entry_id),
-        EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage", None, config_entry.entry_id),
-        EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency", frequency_converter, config_entry.entry_id),
-        EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name", None, config_entry.entry_id),
-        EasunSensor(data_collector, "inverter_time", "Inverter Time", None, "system", "inverter_time", None, config_entry.entry_id),
+        EasunSensor(data_collector, "battery_voltage", "Battery Voltage", UnitOfElectricPotential.VOLT, "battery", "voltage", None, device_id),
+        EasunSensor(data_collector, "battery_current", "Battery Current", UnitOfElectricCurrent.AMPERE, "battery", "current", None, device_id),
+        EasunSensor(data_collector, "battery_power", "Battery Power", UnitOfPower.WATT, "battery", "power", None, device_id),
+        EasunSensor(data_collector, "battery_soc", "Battery State of Charge", PERCENTAGE, "battery", "soc", None, device_id),
+        EasunSensor(data_collector, "battery_temperature", "Battery Temperature", UnitOfTemperature.CELSIUS, "battery", "temperature", None, device_id),
+        EasunSensor(data_collector, "pv_total_power", "PV Total Power", UnitOfPower.WATT, "pv", "total_power", None, device_id),
+        EasunSensor(data_collector, "pv_charging_power", "PV Charging Power", UnitOfPower.WATT, "pv", "charging_power", None, device_id),
+        EasunSensor(data_collector, "pv_charging_current", "PV Charging Current", UnitOfElectricCurrent.AMPERE, "pv", "charging_current", None, device_id),
+        EasunSensor(data_collector, "pv1_voltage", "PV1 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv1_voltage", None, device_id),
+        EasunSensor(data_collector, "pv1_current", "PV1 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv1_current", None, device_id),
+        EasunSensor(data_collector, "pv1_power", "PV1 Power", UnitOfPower.WATT, "pv", "pv1_power", None, device_id),
+        EasunSensor(data_collector, "pv2_voltage", "PV2 Voltage", UnitOfElectricPotential.VOLT, "pv", "pv2_voltage", None, device_id),
+        EasunSensor(data_collector, "pv2_current", "PV2 Current", UnitOfElectricCurrent.AMPERE, "pv", "pv2_current", None, device_id),
+        EasunSensor(data_collector, "pv2_power", "PV2 Power", UnitOfPower.WATT, "pv", "pv2_power", None, device_id),
+        EasunSensor(data_collector, "pv_generated_today", "PV Generated Today", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_today", None, device_id),
+        EasunSensor(data_collector, "pv_generated_total", "PV Generated Total", UnitOfEnergy.KILO_WATT_HOUR, "pv", "pv_generated_total", None, device_id),
+        EasunSensor(data_collector, "grid_voltage", "Grid Voltage", UnitOfElectricPotential.VOLT, "grid", "voltage", None, device_id),
+        EasunSensor(data_collector, "grid_power", "Grid Power", UnitOfPower.WATT, "grid", "power", None, device_id),
+        EasunSensor(data_collector, "grid_frequency", "Grid Frequency", UnitOfFrequency.HERTZ, "grid", "frequency", frequency_converter, device_id),
+        EasunSensor(data_collector, "output_voltage", "Output Voltage", UnitOfElectricPotential.VOLT, "output", "voltage", None, device_id),
+        EasunSensor(data_collector, "output_current", "Output Current", UnitOfElectricCurrent.AMPERE, "output", "current", None, device_id),
+        EasunSensor(data_collector, "output_power", "Output Power", UnitOfPower.WATT, "output", "power", None, device_id),
+        EasunSensor(data_collector, "output_apparent_power", "Output Apparent Power", UnitOfApparentPower.VOLT_AMPERE, "output", "apparent_power", None, device_id),
+        EasunSensor(data_collector, "output_load_percentage", "Output Load Percentage", PERCENTAGE, "output", "load_percentage", None, device_id),
+        EasunSensor(data_collector, "output_frequency", "Output Frequency", UnitOfFrequency.HERTZ, "output", "frequency", frequency_converter, device_id),
+        EasunSensor(data_collector, "operating_mode", "Operating Mode", None, "system", "mode_name", None, device_id),
+        EasunSensor(data_collector, "inverter_time", "Inverter Time", None, "system", "inverter_time", None, device_id),
     ]
     
     add_entities(entities, False)  # Set update_before_add to False since we're managing updates separately

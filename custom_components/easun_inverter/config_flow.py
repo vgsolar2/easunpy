@@ -38,21 +38,29 @@ class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             local_ip = user_input.get("local_ip")
             scan_interval = user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL)
             model = user_input.get("model")  # Get model from input
+            custom_name = user_input.get("custom_name", "").strip()
             
             _LOGGER.debug(f"Processing user input with model: {model}")
             
             if not inverter_ip or not local_ip:
                 errors["base"] = "missing_ip"
+            elif custom_name and not custom_name.replace("_", "").replace("-", "").isalnum():
+                errors["base"] = "invalid_name"
             else:
+                # Generate a default name if none provided
+                if not custom_name:
+                    custom_name = f"inverter_{inverter_ip.replace('.', '_')}"
+                
                 entry_data = {
                     "inverter_ip": inverter_ip,
                     "local_ip": local_ip,
                     "scan_interval": scan_interval,
                     "model": model,
+                    "custom_name": custom_name,
                 }
                 _LOGGER.debug(f"Creating entry with data: {entry_data}")
                 return self.async_create_entry(
-                    title=f"Easun Inverter ({inverter_ip})",
+                    title=f"Easun Inverter ({custom_name})",
                     data=entry_data,
                 )
 
@@ -74,6 +82,7 @@ class EasunInverterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Range(min=1, max=3600)
                 ),
                 vol.Required("model", default="ISOLAR_SMG_II_11K"): vol.In(list(MODEL_CONFIGS.keys())),
+                vol.Optional("custom_name", default=""): str,
             }),
             errors=errors
         )
@@ -127,6 +136,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "inverter_ip": user_input["inverter_ip"],
                     "local_ip": user_input["local_ip"],
                     "model": user_input["model"],
+                    "custom_name": user_input["custom_name"],
                 },
                 options={
                     "scan_interval": user_input["scan_interval"],
@@ -159,6 +169,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "model",
                     default=self.config_entry.data.get("model", "ISOLAR_SMG_II_11K")
                 ): vol.In(list(MODEL_CONFIGS.keys())),
+                vol.Optional(
+                    "custom_name",
+                    default=self.config_entry.data.get("custom_name", "")
+                ): str,
                 vol.Optional(
                     "scan_interval",
                     default=self.config_entry.options.get(
